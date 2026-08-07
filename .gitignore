@@ -1,0 +1,53 @@
+# Tooling / local assistant config
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+
+# C++
+onboard/**/build/
+onboard/**/cmake-build-*/
+*.o
+*.obj
+*.exe
+*.out
+
+# PX4 / simulation artifacts
+simulation/px4/PX4-Autopilot/
+*.ulg
+*.px4log
+
+# Secrets / credentials (never committed)
+*.pem
+*.key
+secrets.yaml
+infrastructure/wireguard/*.conf
+!infrastructure/wireguard/*.example.conf
+
+# Database
+*.sqlite3
+*.db

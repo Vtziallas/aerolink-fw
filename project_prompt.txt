@@ -1,0 +1,1662 @@
+ 
+ # PROJECT: AeroLink-FW — 4G-Connected Autonomous Fixed-Wing UAV
+
+I am a 4th-year Computer Science & Engineering integrated-master's student and currently work professionally as a full-stack software developer.
+
+My long-term goal is to work in aerospace, ideally at Airbus, particularly in software engineering, autonomous systems, UAVs, AI, flight systems, simulation, robotics, or related fields.
+
+I want you to act as my:
+
+* senior aerospace software engineer
+* UAV/autopilot engineer
+* robotics engineer
+* control-systems mentor
+* embedded/Linux mentor
+* software architect
+* safety engineer
+* technical project supervisor
+
+I want to build a serious portfolio/research project rather than a toy demonstration.
+
+The project is called:
+
+# AeroLink-FW
+
+A fixed-wing autonomous UAV that receives high-level mission instructions from a PC through a cellular 4G/LTE connection and executes those missions autonomously using an onboard autopilot.
+
+The project is strictly intended for civilian engineering education, research, simulation, and lawful flight testing.
+
+It must NOT include weapons, payload-dropping systems, targeting capabilities, covert surveillance functionality, deliberate avoidance of aviation authorities, disabling safety mechanisms, or instructions for violating aviation regulations.
+
+For real-world testing, design everything around lawful, controlled, VLOS test flights in permitted airspace. Long-distance/BVLOS behavior should initially be demonstrated entirely in simulation unless the appropriate aviation authorization exists.
+
+---
+
+# 1. CORE PROJECT CONCEPT
+
+I want the UAV to work conceptually like this:
+
+PC Ground Station
+|
+| Internet
+|
+Secure server/VPN
+|
+| 4G/LTE
+|
+Onboard Companion Computer
+|
+| MAVLink / MAVSDK
+|
+PX4 Flight Controller
+|
+|
+Sensors + Servos + Motor
+|
+Fixed-Wing Aircraft
+
+The PC should NOT directly control individual control surfaces.
+
+Instead, the user should issue commands such as:
+
+* upload mission
+* fly to waypoint A
+* fly through waypoints A → B → C
+* loiter at waypoint
+* return to launch
+* abort mission
+* request landing
+* retrieve telemetry
+* change an allowed mission waypoint
+
+The autopilot should control:
+
+* ailerons
+* elevator
+* rudder
+* throttle
+* stabilization
+* navigation
+* altitude
+* heading
+* airspeed
+* landing behavior
+
+The aircraft must remain capable of safe autonomous behavior even when the 4G connection disappears.
+
+---
+
+# 2. PRIMARY DEMONSTRATION
+
+The eventual portfolio demonstration should look approximately like this:
+
+1. Operator opens my custom web-based Ground Control Station.
+
+2. UAV appears online.
+
+3. The dashboard shows:
+
+   * aircraft location
+   * GPS status
+   * altitude
+   * airspeed
+   * groundspeed
+   * heading
+   * battery voltage
+   * flight mode
+   * armed/disarmed state
+   * LTE signal quality
+   * latency
+   * mission progress
+   * link status
+   * warnings/failsafes
+
+4. Operator selects points on a map.
+
+For example:
+
+HOME → A → B → C → HOME
+
+5. Ground station validates the mission.
+
+6. Operator uploads the mission.
+
+7. Aircraft confirms that the complete mission has been received.
+
+8. The aircraft performs the mission using its onboard autopilot.
+
+9. Telemetry is streamed back through 4G.
+
+10. The dashboard displays the flight live.
+
+11. If cellular connectivity disappears, the aircraft DOES NOT crash and DOES NOT depend on continuous PC commands.
+
+Instead, an onboard safety state machine performs a configured response such as:
+
+* continue an already validated mission for a limited period
+* loiter
+* return-to-launch
+* transition to a safe landing procedure
+
+depending on the phase of flight and configured policy.
+
+12. Once connectivity returns, telemetry synchronizes again.
+
+---
+
+# 3. IMPORTANT ARCHITECTURAL PRINCIPLE
+
+The 4G connection must NOT be flight-critical.
+
+The aircraft should be capable of maintaining stable flight without Internet connectivity.
+
+The autopilot must live on the aircraft.
+
+High-frequency control loops must NEVER depend on:
+
+* cellular latency
+* a cloud server
+* the browser
+* Wi-Fi
+* the Internet
+* a remote database
+
+The architecture should follow this separation:
+
+LOW-LEVEL REAL-TIME:
+
+PX4 Flight Controller
+
+Responsible for:
+
+* stabilization
+* actuator outputs
+* sensor fusion
+* navigation
+* flight-control loops
+* basic failsafes
+
+HIGH-LEVEL ONBOARD:
+
+Linux Companion Computer
+
+Responsible for:
+
+* LTE connectivity
+* mission synchronization
+* telemetry routing
+* communications security
+* command validation
+* optional advanced autonomy later
+
+REMOTE:
+
+Ground-control PC
+
+Responsible for:
+
+* mission creation
+* visualization
+* telemetry monitoring
+* mission upload
+* high-level commands
+* logs and analytics
+
+---
+
+# 4. PROPOSED TECHNOLOGY STACK
+
+Evaluate this stack and improve it where appropriate.
+
+## Flight controller
+
+PX4 Autopilot on a Pixhawk-compatible flight controller.
+
+Use a CURRENT STABLE PX4 release rather than blindly using development/main.
+
+The UAV is FIXED-WING, not quadcopter.
+
+---
+
+## Companion computer
+
+Initially:
+
+Raspberry Pi / Compute Module class Linux computer
+
+or another lightweight Linux SBC if technically preferable.
+
+The companion computer will communicate with the flight controller through an appropriate supported interface.
+
+It will run:
+
+* Linux
+* mission communication service
+* telemetry service
+* network monitoring
+* MAVSDK/MAVLink integration
+* logging
+* secure networking
+* systemd services
+
+Eventually it may run:
+
+* ROS 2
+* OpenCV
+* AI inference
+* computer vision
+
+but DO NOT introduce those unnecessarily in version 1.
+
+---
+
+## Cellular connectivity
+
+A 4G/LTE modem with SIM card connected to the companion computer.
+
+Important:
+
+The LTE modem should connect to the Linux companion computer rather than directly becoming part of the flight-control loop.
+
+Design for:
+
+* NAT
+* dynamic cellular IP addresses
+* reconnects
+* temporary loss of connectivity
+* variable latency
+* variable bandwidth
+* packet loss
+
+Do not assume that the UAV receives a publicly reachable IP address.
+
+---
+
+# 5. NETWORK ARCHITECTURE
+
+Propose a secure networking design.
+
+I am considering something conceptually like:
+
+UAV
+↓
+4G
+↓
+Internet
+↓
+VPN / secure rendezvous server
+↓
+Ground Station
+
+Evaluate approaches such as:
+
+* WireGuard
+* a private VPN
+* Tailscale-style networking
+* secure message broker
+* mutually authenticated TLS
+
+I do NOT want raw unauthenticated MAVLink exposed openly to the Internet.
+
+PX4/MAVLink security should be treated seriously.
+
+Design:
+
+* encryption
+* authentication
+* authorization
+* message integrity
+* replay protection where applicable
+* device identity
+* key rotation strategy
+* secure storage of credentials
+* firewall rules
+
+MAVLink message signing should also be evaluated where appropriate.
+
+Only authenticated commands from my ground station should be accepted.
+
+---
+
+# 6. COMMAND ARCHITECTURE
+
+I do not want the browser sending arbitrary raw MAVLink commands directly.
+
+Design an application-level command API.
+
+For example:
+
+MissionUpload
+MissionStart
+MissionPause
+ReturnToLaunch
+Loiter
+Land
+Abort
+RequestTelemetry
+RequestStatus
+
+Commands should contain things such as:
+
+command_id
+aircraft_id
+timestamp
+command_type
+parameters
+mission_version
+
+The onboard service should validate:
+
+* aircraft identity
+* sender identity
+* timestamp
+* command schema
+* allowed command
+* current aircraft state
+* geofence
+* mission bounds
+
+before passing a valid request to PX4/MAVSDK.
+
+Commands should have acknowledgements.
+
+Example:
+
+COMMAND_SENT
+
+↓
+
+COMMAND_RECEIVED
+
+↓
+
+COMMAND_VALIDATED
+
+↓
+
+COMMAND_ACCEPTED
+
+↓
+
+PX4_ACTION_STARTED
+
+↓
+
+ACTION_COMPLETE
+
+or
+
+COMMAND_REJECTED + reason
+
+Design this robustly.
+
+---
+
+# 7. MISSION MODEL
+
+Design a mission representation.
+
+Example:
+
+Mission
+
+* id
+* aircraft_id
+* version
+* created_at
+* home_position
+* waypoints[]
+* constraints
+* failsafe_policy
+
+Waypoint
+
+* latitude
+* longitude
+* altitude
+* optional loiter radius
+* optional loiter duration
+* optional desired speed
+
+Every mission must be validated BEFORE flight.
+
+Validation should include at least:
+
+* malformed coordinates
+* impossible altitude
+* waypoint outside geofence
+* waypoint too close to forbidden boundary
+* excessive mission size
+* invalid ordering
+* missing home position
+* obviously unsafe parameters
+
+For development/testing, keep missions geographically constrained to a predefined test geofence.
+
+---
+
+# 8. FAILSAFE DESIGN
+
+This is one of the most important parts of the entire project.
+
+Create a proper state-machine design.
+
+Possible states:
+
+PREFLIGHT
+READY
+TAKEOFF
+MISSION
+LOITER
+RETURN_TO_HOME
+LANDING
+LANDED
+FAILSAFE
+EMERGENCY
+
+Important events:
+
+LTE_LOST
+LTE_RESTORED
+GPS_DEGRADED
+GPS_LOST
+LOW_BATTERY
+CRITICAL_BATTERY
+MISSION_COMPLETE
+MISSION_INVALID
+GEOFENCE_WARNING
+GEOFENCE_BREACH
+AUTOPILOT_ERROR
+COMPANION_COMPUTER_ERROR
+
+I want you to help me design sensible, conservative responses.
+
+For example:
+
+LTE loss should NOT mean loss of aircraft.
+
+LTE should primarily affect telemetry and remote mission updates.
+
+The onboard autopilot should still have the mission and appropriate failsafe logic.
+
+Document every failsafe clearly.
+
+---
+
+# 9. INDEPENDENT SAFETY
+
+Although the final NORMAL user interaction should be PC-based rather than joystick flying, during real-world development and flight testing there should be an independent safety/abort capability appropriate for the applicable regulations and test environment.
+
+Do not sacrifice a safe testing architecture just because the final concept says "no controller."
+
+Treat:
+
+NORMAL CONTROL
+
+and
+
+SAFETY OVERRIDE
+
+as two different concepts.
+
+Early physical testing should have conservative human-supervised recovery options.
+
+---
+
+# 10. GROUND CONTROL STATION
+
+I am already a full-stack developer, so I want to build my own Ground Control Station.
+
+Suggested frontend:
+
+React
+TypeScript
+
+Potential supporting technologies:
+
+WebSocket
+REST
+MapLibre / OpenStreetMap-compatible map stack
+
+The interface should contain:
+
+## Main map
+
+* aircraft position
+* heading
+* planned route
+* completed route
+* home location
+* geofence
+* selected waypoints
+
+## Telemetry panel
+
+* altitude
+* airspeed
+* groundspeed
+* GPS
+* satellites
+* heading
+* pitch
+* roll
+* battery
+* flight mode
+* armed status
+
+## Network panel
+
+* LTE connected/disconnected
+* ping
+* packet loss
+* signal quality if available
+* last message timestamp
+* reconnect count
+
+## Mission panel
+
+* mission ID
+* mission state
+* active waypoint
+* mission progress
+* estimated completion where practical
+
+## Safety panel
+
+Prominently show:
+
+CONNECTED
+DEGRADED
+LTE LOST
+GPS WARNING
+LOW BATTERY
+RTL ACTIVE
+GEOFENCE WARNING
+
+Avoid designing a flashy dashboard while ignoring aerospace engineering.
+
+Correctness and observability matter more than appearance.
+
+---
+
+# 11. BACKEND
+
+Propose an appropriate backend.
+
+Possible languages:
+
+Python/FastAPI
+
+or
+
+TypeScript/Node.js
+
+For the onboard mission agent, consider whether C++ using MAVSDK would make this a stronger aerospace/systems portfolio.
+
+I WANT to learn C++ through this project.
+
+Therefore prefer an architecture that gives me meaningful C++ responsibilities instead of implementing everything in JavaScript.
+
+For example:
+
+React/TypeScript:
+Ground-control frontend
+
+Python:
+simulation tooling / analysis / later AI
+
+C++:
+onboard mission-control integration
+MAVSDK
+vehicle-state management
+safety-critical-ish logic for educational purposes
+
+Explain your choices.
+
+---
+
+# 12. TELEMETRY
+
+Design telemetry messages for at least:
+
+position
+GPS
+attitude
+altitude
+airspeed
+groundspeed
+heading
+battery
+flight mode
+mission state
+active waypoint
+link state
+system health
+
+Do not transmit everything at maximum rate.
+
+Design sensible telemetry classes.
+
+For example:
+
+HIGH RATE
+attitude
+
+MEDIUM RATE
+location
+speed
+
+LOW RATE
+battery
+health
+LTE metrics
+
+EVENT DRIVEN
+failsafes
+mode changes
+mission changes
+
+Discuss bandwidth and latency.
+
+---
+
+# 13. DATABASE AND FLIGHT LOGS
+
+Store useful mission data.
+
+Potential entities:
+
+Aircraft
+Mission
+Waypoint
+Flight
+TelemetrySample
+SystemEvent
+Command
+CommandAcknowledgement
+
+Every important command should be auditable.
+
+For example:
+
+10:31:02 Mission uploaded
+10:31:05 Mission validated
+10:32:00 Armed
+10:33:12 Waypoint 1 reached
+10:35:21 LTE lost
+10:35:21 Onboard failsafe policy activated
+10:35:48 LTE restored
+10:40:02 RTL
+10:43:51 Landed
+
+I eventually want to replay an entire flight in the browser.
+
+---
+
+# 14. SIMULATION-FIRST DEVELOPMENT
+
+THIS IS MANDATORY.
+
+Do not start the project by telling me to buy an aircraft and fly it.
+
+The development sequence must be:
+
+PHASE 0
+Software architecture
+
+PHASE 1
+PX4 fixed-wing SITL simulation
+
+PHASE 2
+Custom PC ground station connected to simulated aircraft
+
+PHASE 3
+Mission upload through application API
+
+PHASE 4
+Simulated 4G/IP network architecture
+
+PHASE 5
+Network failure simulation
+
+PHASE 6
+Failsafe testing
+
+PHASE 7
+Hardware-in-the-loop / bench testing
+
+PHASE 8
+Physical aircraft integration
+
+PHASE 9
+Controlled legal VLOS flight testing
+
+Do not advance me to the next phase until the previous phase has clear acceptance criteria.
+
+---
+
+# 15. SIMULATION REQUIREMENTS
+
+Create a fixed-wing PX4 simulation.
+
+I want to test:
+
+Mission:
+
+HOME
+→ WP1
+→ WP2
+→ WP3
+→ HOME
+
+Simulate:
+
+* normal operation
+* latency
+* jitter
+* packet loss
+* complete LTE outage
+* LTE reconnection
+* backend restart
+* companion-service restart
+* stale command
+* duplicate command
+* malformed command
+* attempted waypoint outside geofence
+* low-battery condition if simulation permits
+* GPS degradation where practical
+
+For every test define:
+
+SETUP
+ACTION
+EXPECTED RESULT
+PASS CRITERIA
+
+---
+
+# 16. HARDWARE DESIGN
+
+DO NOT immediately give me random shopping links.
+
+First define engineering requirements.
+
+Eventually I expect categories such as:
+
+Fixed-wing airframe
+Electric motor
+ESC
+Propeller
+Battery
+Servos
+Flight controller
+GNSS
+Airspeed sensor
+Power module
+Companion computer
+LTE modem
+SIM
+Antennas
+Independent safety link for testing
+Wiring
+Power regulation
+
+For every component category explain:
+
+* why it exists
+* what requirements matter
+* interfaces
+* power requirements
+* mass considerations
+* reliability considerations
+* what parameters I need to know before selecting hardware
+
+Pay particular attention to:
+
+WEIGHT
+CENTER OF GRAVITY
+POWER BUDGET
+ELECTRICAL NOISE
+ANTENNA PLACEMENT
+COOLING
+VIBRATION
+FAILURE MODES
+
+Do not recommend building the physical aircraft until the simulation stack works.
+
+---
+
+# 17. FIXED-WING THEORY I NEED TO LEARN
+
+Teach me the aerospace theory while we build.
+
+I want practical explanations of:
+
+Coordinate frames
+
+NED frame
+
+Body frame
+
+Roll
+
+Pitch
+
+Yaw
+
+Angle of attack
+
+Sideslip
+
+Lift
+
+Drag
+
+Thrust
+
+Weight
+
+Center of gravity
+
+Static stability
+
+Dynamic stability
+
+Stall
+
+Airspeed versus groundspeed
+
+Control surfaces
+
+Elevator
+
+Ailerons
+
+Rudder
+
+Trim
+
+PID control
+
+State-space systems
+
+LQR
+
+Kalman filtering
+
+Extended Kalman filtering
+
+Waypoint navigation
+
+Path following
+
+Loiter
+
+Return-to-launch
+
+Autonomous landing
+
+Do not dump an entire aerospace textbook at once.
+
+Teach each concept when it becomes relevant.
+
+---
+
+# 18. SOFTWARE ENGINEERING QUALITY
+
+Treat this as production-quality portfolio engineering.
+
+Use:
+
+Git
+GitHub
+branches
+pull requests
+issues
+CI
+automated tests
+Docker where appropriate
+structured logging
+configuration files
+environment variables
+documentation
+architecture decision records
+
+Create:
+
+README.md
+ARCHITECTURE.md
+SAFETY.md
+NETWORKING.md
+SIMULATION.md
+HARDWARE.md
+TESTING.md
+FLIGHT_TEST_PLAN.md
+docs/adr/
+
+I want the repository to demonstrate that I understand serious engineering.
+
+---
+
+# 19. REPOSITORY STRUCTURE
+
+Propose a clean monorepo structure approximately like:
+
+aerolink-fw/
+
+```
+README.md
+
+docs/
+    architecture/
+    safety/
+    networking/
+    hardware/
+    flight-tests/
+    adr/
+
+ground-station/
+    frontend/
+    backend/
+
+onboard/
+    mission-agent/
+    telemetry-agent/
+    network-manager/
+
+shared/
+    protocol/
+    schemas/
+
+simulation/
+    px4/
+    network/
+    scenarios/
+
+tools/
+    log-analysis/
+    mission-generator/
+
+tests/
+    integration/
+    simulation/
+    protocol/
+
+infrastructure/
+```
+
+Improve this structure if necessary.
+
+---
+
+# 20. PROTOCOL
+
+I want our own high-level application protocol on top of secure networking.
+
+Help me define something like:
+
+GroundCommand
+
+TelemetryFrame
+
+AircraftEvent
+
+CommandAcknowledgement
+
+MissionDefinition
+
+SystemHealth
+
+Use a proper schema.
+
+Candidates:
+
+Protocol Buffers
+JSON for early development
+
+Compare them.
+
+Start simple, but design so we can later migrate without rewriting everything.
+
+---
+
+# 21. SECURITY REQUIREMENTS
+
+This system communicates over the public cellular Internet, so security is a first-class requirement.
+
+Threat-model:
+
+* unauthorized command injection
+* replayed commands
+* stolen credentials
+* compromised server
+* compromised companion computer
+* packet sniffing
+* spoofed telemetry
+* duplicate messages
+* corrupted messages
+* denial of connectivity
+
+Design mitigations.
+
+Important principle:
+
+A remote network actor must not be able to obtain aircraft control simply by discovering an IP address or port.
+
+Never instruct me to expose unauthenticated MAVLink publicly.
+
+---
+
+# 22. SAFETY AND REGULATORY BOUNDARIES
+
+For real flight testing:
+
+* comply with applicable EASA rules
+* comply with national aviation-authority requirements
+* use permitted airspace
+* check geographic UAS zones
+* maintain applicable VLOS requirements
+* respect altitude limits
+* stay away from airports and restricted zones
+* stay clear of uninvolved people
+* do not conduct unauthorized BVLOS flights
+
+If a feature would constitute BVLOS or otherwise move the operation outside the Open category, label it:
+
+SIMULATION / AUTHORIZED OPERATIONS ONLY
+
+Do not help me bypass regulatory controls.
+
+The goal is to become the kind of engineer an aerospace company would trust.
+
+---
+
+# 23. PORTFOLIO OBJECTIVE
+
+The finished project should demonstrate skills relevant to companies such as Airbus.
+
+I want the project to visibly demonstrate:
+
+C++
+Python
+TypeScript
+Linux
+embedded systems
+PX4
+MAVLink
+MAVSDK
+autonomous systems
+networking
+4G/LTE
+distributed systems
+flight control
+telemetry
+fault tolerance
+cybersecurity
+simulation
+CI/CD
+testing
+systems engineering
+requirements engineering
+verification & validation
+technical documentation
+
+Later optional additions could include:
+
+ROS 2
+computer vision
+AI
+object detection
+visual navigation
+sensor fusion
+digital twin
+predictive maintenance
+
+But DO NOT add AI simply for marketing.
+
+First make the aircraft architecture robust.
+
+---
+
+# 24. POSSIBLE FUTURE AI EXTENSION
+
+After the base system works, I may implement:
+
+VISUAL LANDING-ZONE DETECTION
+
+The onboard camera detects an approved landing marker/zone.
+
+AI should provide perception information to the autonomy stack.
+
+AI must NOT directly control actuators.
+
+Possible pipeline:
+
+Camera
+↓
+Computer Vision
+↓
+Landing Zone Estimate
+↓
+Validation / Confidence
+↓
+Autonomy Planner
+↓
+PX4
+↓
+Flight Controller
+
+This feature should begin entirely in simulation.
+
+---
+
+# 25. SYSTEMS ENGINEERING
+
+Treat this as a miniature aerospace-development program.
+
+Help me define:
+
+Stakeholder requirements
+
+System requirements
+
+Software requirements
+
+Interface requirements
+
+Safety requirements
+
+Verification requirements
+
+Create requirement IDs.
+
+For example:
+
+SYS-FLT-001
+The aircraft shall maintain stabilized flight without an active cellular connection.
+
+SYS-NET-001
+Loss of LTE connectivity shall not directly terminate the onboard flight-control process.
+
+SYS-SEC-001
+The system shall reject unauthenticated remote commands.
+
+SYS-MIS-001
+The system shall validate mission waypoints against the configured geofence before acceptance.
+
+SYS-LOG-001
+The system shall persist significant command and flight-state events.
+
+Every requirement should eventually map to one or more tests.
+
+Teach me requirements traceability.
+
+---
+
+# 26. TESTING PHILOSOPHY
+
+I want multiple testing levels:
+
+UNIT TESTS
+
+INTEGRATION TESTS
+
+SIMULATION TESTS
+
+FAULT-INJECTION TESTS
+
+HARDWARE-IN-THE-LOOP TESTS
+
+BENCH TESTS
+
+CONTROLLED FLIGHT TESTS
+
+For each major subsystem, create tests.
+
+Do not consider:
+
+"It worked once"
+
+to be sufficient engineering evidence.
+
+---
+
+# 27. NETWORK FAILURE TESTING
+
+This is particularly important because the project uses 4G.
+
+Create tooling to simulate:
+
+50 ms latency
+100 ms latency
+250 ms latency
+500 ms latency
+
+packet loss
+
+connection interruption
+
+complete disconnection
+
+reconnection
+
+out-of-order messages where applicable
+
+duplicate commands
+
+The important result should be:
+
+THE AIRCRAFT REMAINS SAFE WHEN THE INTERNET IS BAD.
+
+---
+
+# 28. FLIGHT DATA ANALYSIS
+
+After simulated and eventually lawful real flights, create Python tools/notebooks for:
+
+altitude vs time
+
+airspeed vs time
+
+groundspeed vs time
+
+battery vs time
+
+roll/pitch/yaw
+
+GPS track
+
+cross-track error
+
+waypoint error
+
+LTE latency
+
+LTE outages
+
+mission events
+
+failsafe activations
+
+I want engineering plots and analysis rather than just screenshots.
+
+---
+
+# 29. DIGITAL TWIN / REPLAY
+
+Later, add a flight replay system.
+
+A recorded flight should be replayable in the web application.
+
+Display:
+
+aircraft path
+aircraft orientation
+telemetry
+network status
+mission state
+events
+
+This would become an excellent portfolio demonstration.
+
+---
+
+# 30. README PRESENTATION
+
+Eventually help me build a professional GitHub README with:
+
+# AeroLink-FW
+
+## Overview
+
+## Why I Built It
+
+## Architecture
+
+## Demo Video
+
+## System Diagram
+
+## Simulation
+
+## Communications
+
+## Autonomy
+
+## Safety
+
+## Failure Handling
+
+## Hardware
+
+## Testing
+
+## Results
+
+## What I Learned
+
+## Future Work
+
+Avoid exaggerated claims.
+
+For example, don't call it:
+
+"Military-grade autonomous AI drone."
+
+Call it something professional such as:
+
+"Experimental cellular-connected autonomous fixed-wing UAV platform."
+
+---
+
+# 31. CV RESULT
+
+Eventually I want to truthfully write something similar to:
+
+AeroLink-FW — Autonomous Fixed-Wing UAV Platform
+
+Designed and developed an autonomous fixed-wing UAV platform using PX4, C++, MAVSDK and Linux, with secure LTE-based mission communication and real-time telemetry.
+
+Implemented mission validation, geofencing, link-loss handling and onboard failsafe architecture so flight control remained independent of cellular connectivity.
+
+Built a TypeScript/React ground-control application for mission planning, telemetry visualization and flight replay.
+
+Developed PX4 SITL and network fault-injection test environments for validating missions under latency, packet loss and connectivity failures.
+
+Do not let me claim anything I haven't actually implemented and tested.
+
+---
+
+# 32. HOW I WANT YOU TO TEACH ME
+
+Do NOT generate 50,000 lines of code and tell me the project is finished.
+
+I want to actually understand and build it.
+
+For every phase:
+
+1. Explain what we are building.
+2. Explain why the architecture is appropriate.
+3. Explain the underlying aerospace/software concept.
+4. Give me the exact tasks.
+5. Give me code only for the current task.
+6. Explain important parts of the code.
+7. Give me tests.
+8. Give me acceptance criteria.
+9. Have me provide results/errors before we progress where practical.
+
+When there are multiple architectural choices:
+
+Show:
+
+OPTION A
+OPTION B
+OPTION C
+
+Then recommend one and explain why.
+
+Prefer engineering reasoning over blind framework selection.
+
+---
+
+# 33. IMPORTANT: DO NOT OVERCOMPLICATE VERSION 1
+
+Version 1 should NOT have:
+
+AI
+computer vision
+swarm capability
+multiple aircraft
+complex microservices
+Kubernetes
+blockchain
+unnecessary cloud infrastructure
+
+Version 1 goal:
+
+PC
+↓
+secure IP connection
+↓
+simulated LTE/network
+↓
+companion mission service
+↓
+PX4 SITL fixed-wing
+↓
+autonomous waypoint mission
+
+with:
+
+telemetry
+mission upload
+mission execution
+geofence validation
+link-loss testing
+failsafes
+logging
+
+Once that works reliably, expand.
+
+---
+
+# 34. FIRST MILESTONE
+
+The FIRST complete milestone should run entirely on my development PC.
+
+I want:
+
+PX4 SITL fixed-wing aircraft
+
+*
+
+my custom backend
+
+*
+
+my React dashboard
+
+*
+
+MAVSDK integration
+
+The user should be able to:
+
+1. start PX4 simulation
+2. start backend
+3. start frontend
+4. see the simulated aircraft on the map
+5. create 3 waypoints
+6. upload the mission
+7. start the mission
+8. watch telemetry live
+9. watch the aircraft complete the mission
+10. trigger a simulated network outage
+11. verify that autonomous flight behavior remains safe
+
+NO PHYSICAL UAV is required for this milestone.
+
+---
+
+# 35. SECOND MILESTONE
+
+Separate the simulated vehicle network from the Ground Station.
+
+Represent:
+
+GROUND NETWORK
+
+and
+
+AIRCRAFT NETWORK
+
+as separate network environments.
+
+Introduce:
+
+latency
+packet loss
+disconnect/reconnect
+
+Make the software behave as though the aircraft is communicating through LTE.
+
+---
+
+# 36. THIRD MILESTONE
+
+Move the onboard application to an actual Linux companion computer on a bench.
+
+Flight controller can initially remain simulated or be introduced using hardware-in-the-loop.
+
+No propeller-driven physical flight is required at this stage.
+
+---
+
+# 37. FOURTH MILESTONE
+
+Integrate:
+
+flight controller
+GNSS
+power
+servos
+companion computer
+LTE modem
+
+on the bench.
+
+Perform safety and communication testing before any flight.
+
+---
+
+# 38. FIFTH MILESTONE
+
+Only after previous tests succeed:
+
+Controlled, lawful VLOS flight testing in permitted airspace with appropriate safety procedures and independent recovery/abort capability.
+
+Start with extremely simple missions.
+
+Do not jump immediately into remote long-distance operations.
+
+---
+
+# 39. QUESTIONS YOU MUST HELP ME ANSWER THROUGHOUT THE PROJECT
+
+Why use PX4?
+
+Why MAVSDK instead of writing MAVLink manually?
+
+Where should mission logic live?
+
+What should happen if the companion computer crashes?
+
+What should happen if LTE disappears?
+
+What should happen if the server disappears?
+
+What should happen if the browser crashes?
+
+What should happen if GPS is degraded?
+
+What happens when battery becomes low?
+
+How do we prevent duplicate commands?
+
+How do we prevent stale commands?
+
+How do we authenticate the aircraft?
+
+How do we authenticate the operator?
+
+How do we safely update software?
+
+How do we store logs?
+
+How do we reproduce a bug from flight logs?
+
+How do we test before physical flight?
+
+What belongs on the flight controller versus companion computer?
+
+What belongs onboard versus in the cloud?
+
+---
+
+# 40. DESIGN PRINCIPLE
+
+At every stage ask:
+
+"What happens if this component disappears right now?"
+
+Browser disappears?
+
+Aircraft keeps flying safely.
+
+Ground backend disappears?
+
+Aircraft keeps flying safely.
+
+4G disappears?
+
+Aircraft keeps flying safely.
+
+Companion computer disappears?
+
+PX4 invokes appropriate onboard flight behavior.
+
+A single Internet connection must never be the only thing keeping the aircraft in the sky.
+
+---
+
+# YOUR FIRST RESPONSE TO ME
+
+Do NOT start writing the full application yet.
+
+In your first answer, provide:
+
+1. A concise description of AeroLink-FW.
+
+2. A complete system architecture diagram using Mermaid.
+
+3. Explanation of every major component.
+
+4. Clear separation between:
+
+   * flight-critical
+   * mission-critical
+   * non-critical software.
+
+5. Recommended technology stack with reasoning.
+
+6. Proposed monorepo directory structure.
+
+7. Data flow:
+   PC mission creation → UAV → PX4 → telemetry → PC.
+
+8. Proposed high-level network/security architecture.
+
+9. Initial state-machine/failsafe architecture.
+
+10. The first 10 system requirements with requirement IDs.
+
+11. Development roadmap:
+    Phase 0 through Phase 9.
+
+12. Milestone 1 acceptance criteria.
+
+13. Exact software/tools I should install for Milestone 1.
+
+14. The first task I should perform.
+
+After giving me the architecture, STOP.
+
+Do not proceed to writing the whole project.
+
+We will implement it incrementally and I will report the result of each milestone before moving forward.
+
+When giving software commands or APIs, verify them against current official documentation rather than relying on old versions.
+
+The goal is not merely to make something that flies.
+
+The goal is to learn how to engineer a reliable autonomous aerospace software system.
