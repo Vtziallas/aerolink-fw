@@ -13,7 +13,7 @@ Simulation backend: **SIH** ("Simulation In Hardware"), not jMAVSim. jMAVSim onl
 **Acceptance criteria:**
 
 - [x] PX4 fixed-wing SITL launches and reaches a flyable state
-- [ ] Backend connects to SITL via MAVSDK and can read vehicle state
+- [x] Backend connects to SITL via MAVSDK and can read vehicle state
 - [ ] Frontend shows the simulated aircraft's live position on a map
 - [ ] Operator can place 3 waypoints (HOME → A → B → C → HOME) in the UI
 - [ ] Backend validates the mission (coordinates, ordering, geofence) before upload
@@ -61,6 +61,12 @@ The result that matters: **the aircraft remains safe when the network is bad.** 
 - **Fixed-wing missions require an explicit landing item.** Unlike multicopters, PX4's `mission_feasibility_checker` rejects a fixed-wing mission that only ends in "RTL after mission" — it needs a mission item with a landing action/pattern (MAVSDK: `MissionItem.VehicleAction.LAND` on the final item). Without it, the mission silently fails to start and the aircraft never leaves the ground, with no obviously-fatal error unless you go looking in the PX4 console log.
 - **MAVLink ports for SITL instance 0:** companion/offboard link `udp://:14540` (MAVSDK default), GCS link on `18570` (PX4 sends there; QGroundControl/our GCS should listen there or PX4's `18570` maps to `14550` on the remote side depending on tool defaults — verify against `px4-rc.mavlink` if a connection doesn't come up).
 - Verified end-to-end with MAVSDK: armed, uploaded a 4-item mission (3 waypoints at 30m + landing item), flew it autonomously — climbed to ~31m, executed the route, descended, and landed near the target point.
+
+## Phase 2 Findings (backend against SITL)
+
+- **The ground-station backend must currently run inside WSL, not natively on Windows**, when developing against WSL-hosted SITL. WSL2 defaults to NAT networking (no `.wslconfig` with `networkingMode=mirrored`), which forwards Windows→WSL over `localhost` but not the reverse: PX4 (inside WSL) sends its outbound MAVLink stream to `localhost:14540`, which stays inside the WSL network namespace and never reaches a Windows-native process. Rather than force mirrored networking or reconfigure PX4's target address, we just run the backend inside WSL too (venv at `~/venvs/aerolink-backend`, source still on the Windows-mounted repo path). Actually bridging separate ground/aircraft networks is Phase 4's job, done properly with WireGuard — not something to improvise here.
+- Editable pip installs (`pip install -e .`) fail on `/mnt/c/...` paths with `Operation not permitted` (a 9P filesystem quirk with the temp files `setuptools` creates). Fix: install dependencies directly instead of installing our own package; running `uvicorn app.main:app` from the backend directory makes the `app` package importable without needing it "installed".
+- Verified: `GET /api/status` reports `vehicle_connected: true`; `/ws/telemetry` streams live position, attitude, airspeed/groundspeed/heading (via MAVSDK's `fixedwing_metrics`, not derived from NED velocity), battery, flight mode, armed state, and GPS/armable health — all sourced from the same SITL instance validated in Phase 1.
 
 ## Status
 
