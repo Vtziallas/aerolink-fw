@@ -14,7 +14,7 @@ Simulation backend: **SIH** ("Simulation In Hardware"), not jMAVSim. jMAVSim onl
 
 - [x] PX4 fixed-wing SITL launches and reaches a flyable state
 - [x] Backend connects to SITL via MAVSDK and can read vehicle state
-- [ ] Frontend shows the simulated aircraft's live position on a map
+- [x] Frontend shows the simulated aircraft's live position on a map
 - [ ] Operator can place 3 waypoints (HOME → A → B → C → HOME) in the UI
 - [ ] Backend validates the mission (coordinates, ordering, geofence) before upload
 - [ ] Mission uploads to PX4 and the aircraft confirms receipt (visible in UI)
@@ -67,6 +67,11 @@ The result that matters: **the aircraft remains safe when the network is bad.** 
 - **The ground-station backend must currently run inside WSL, not natively on Windows**, when developing against WSL-hosted SITL. WSL2 defaults to NAT networking (no `.wslconfig` with `networkingMode=mirrored`), which forwards Windows→WSL over `localhost` but not the reverse: PX4 (inside WSL) sends its outbound MAVLink stream to `localhost:14540`, which stays inside the WSL network namespace and never reaches a Windows-native process. Rather than force mirrored networking or reconfigure PX4's target address, we just run the backend inside WSL too (venv at `~/venvs/aerolink-backend`, source still on the Windows-mounted repo path). Actually bridging separate ground/aircraft networks is Phase 4's job, done properly with WireGuard — not something to improvise here.
 - Editable pip installs (`pip install -e .`) fail on `/mnt/c/...` paths with `Operation not permitted` (a 9P filesystem quirk with the temp files `setuptools` creates). Fix: install dependencies directly instead of installing our own package; running `uvicorn app.main:app` from the backend directory makes the `app` package importable without needing it "installed".
 - Verified: `GET /api/status` reports `vehicle_connected: true`; `/ws/telemetry` streams live position, attitude, airspeed/groundspeed/heading (via MAVSDK's `fixedwing_metrics`, not derived from NED velocity), battery, flight mode, armed state, and GPS/armable health — all sourced from the same SITL instance validated in Phase 1.
+
+## Phase 2 Findings (frontend)
+
+- The frontend dev server runs natively on Windows (Node 22, Vite) while SITL and the backend run inside WSL. This direction (Windows → WSL over `localhost`) is exactly what WSL2's default NAT networking *does* forward, unlike the reverse direction noted above -- so the WebSocket connection from the browser to `ws://localhost:8000/ws/telemetry` works without any extra configuration.
+- Verified visually: map loads with the aircraft marker positioned correctly near PX4 SITL's default home, telemetry panel updates live (altitude, airspeed, heading, battery, flight mode, armed state), link-status badge reflects the WebSocket connection state.
 
 ## Status
 

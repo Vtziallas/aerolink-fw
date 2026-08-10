@@ -1,0 +1,107 @@
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #10131a;
+  color: #e6e8ec;
+}
+
+.app-header {
+  padding: 10px 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: #161a24;
+  border-bottom: 1px solid #262b38;
+}
+
+.app-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.telemetry-panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  width: 260px;
+  background: rgba(17, 20, 28, 0.92);
+  border: 1px solid #2b3040;
+  border-radius: 8px;
+  padding: 10px 12px;
+  backdrop-filter: blur(4px);
+}
+
+.telemetry-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2b3040;
+}
+
+.link-badge,
+.armed-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.link-open {
+  background: #163a22;
+  color: #4ade80;
+}
+.link-connecting {
+  background: #3a2f16;
+  color: #facc15;
+}
+.link-closed {
+  background: #3a1616;
+  color: #f87171;
+}
+
+.armed-badge.armed {
+  background: #3a1616;
+  color: #f87171;
+}
+.armed-badge.disarmed {
+  background: #1e2230;
+  color: #9aa4b2;
+}
+
+.flight-mode {
+  margin-left: auto;
+  font-size: 12px;
+  color: #9aa4b2;
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+.telemetry-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.telemetry-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.telemetry-value {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.telemetry-value.warn {
+  color: #f87171;
+}
