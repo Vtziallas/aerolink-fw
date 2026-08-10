@@ -15,11 +15,11 @@ Simulation backend: **SIH** ("Simulation In Hardware"), not jMAVSim. jMAVSim onl
 - [x] PX4 fixed-wing SITL launches and reaches a flyable state
 - [x] Backend connects to SITL via MAVSDK and can read vehicle state
 - [x] Frontend shows the simulated aircraft's live position on a map
-- [ ] Operator can place 3 waypoints (HOME → A → B → C → HOME) in the UI
-- [ ] Backend validates the mission (coordinates, ordering, geofence) before upload
-- [ ] Mission uploads to PX4 and the aircraft confirms receipt (visible in UI)
-- [ ] Operator starts the mission; aircraft flies it autonomously in SITL
-- [ ] Telemetry streams live to the dashboard throughout
+- [x] Operator can place 3 waypoints (HOME → A → B → C → HOME) in the UI
+- [x] Backend validates the mission (coordinates, ordering, geofence) before upload
+- [x] Mission uploads to PX4 and the aircraft confirms receipt (visible in UI)
+- [x] Operator starts the mission; aircraft flies it autonomously in SITL
+- [x] Telemetry streams live to the dashboard throughout
 - [ ] A simulated network outage (backend↔MAVSDK link, not PX4 itself) is triggered manually
 - [ ] Aircraft continues flying safely / applies a sane failsafe response, independent of the interrupted link
 
@@ -73,6 +73,18 @@ The result that matters: **the aircraft remains safe when the network is bad.** 
 - The frontend dev server runs natively on Windows (Node 22, Vite) while SITL and the backend run inside WSL. This direction (Windows → WSL over `localhost`) is exactly what WSL2's default NAT networking *does* forward, unlike the reverse direction noted above -- so the WebSocket connection from the browser to `ws://localhost:8000/ws/telemetry` works without any extra configuration.
 - Verified visually: map loads with the aircraft marker positioned correctly near PX4 SITL's default home, telemetry panel updates live (altitude, airspeed, heading, battery, flight mode, armed state), link-status badge reflects the WebSocket connection state.
 
+## Phase 3 Findings (mission upload, validation, RTL)
+
+Several real bugs surfaced testing this end-to-end, beyond the mission-plan itself:
+
+- **CORS was never configured on the backend.** The frontend (`:5173`) and backend (`:8000`) are different origins, so the browser sends a preflight `OPTIONS` request before any `POST` -- FastAPI/Starlette return `405` for that by default with no CORS middleware installed. WebSocket connections aren't subject to the same preflight, which is exactly why telemetry worked from day one while mission upload silently failed until `CORSMiddleware` was added.
+- **Don't gate `arm()` on the `is_armable` telemetry flag.** It was observed `False` on a *fresh* MAVSDK connection immediately after an autonomous landing, while a direct `arm()` call succeeded right away. The flag is advisory and can lag PX4's actual real-time arming check. Fix: just attempt the arm and surface whatever real rejection PX4 returns, rather than pre-emptively blocking on a client-side signal that isn't authoritative.
+- **A single mission item's speed left as NaN (instead of a real number) can make PX4's landing-approach feasibility check spuriously reject an otherwise-valid mission** ("the approach waypoint must be above the landing point", even when the altitudes were plainly fine). Fixed by applying a default cruise speed (`DEFAULT_CRUISE_SPEED_M_S`) to every mission item instead of leaving unset speeds as NaN.
+- **Sharp turns between waypoints destabilize the fixed-wing controller even when each leg individually satisfies the minimum-separation check.** A real test mission with an ~89&deg; turn at one interior waypoint (legs of ~200-320m, well above the 150m minimum) caused the aircraft to lose the next waypoint and enter a bad state. Distance alone doesn't capture turn difficulty -- added a separate turn-angle check (`MAX_TURN_ANGLE_DEG`, default 70&deg;) between consecutive *user* waypoints. Deliberately not applied to the final turn into the auto-appended landing point, since an ordinary out-and-back mission naturally needs a sharp turn to line up with home, which isn't evidence of the same problem.
+- **`RTL_RETURN_ALT` was 100m in this SITL instance, not PX4's compiled default of 60m** (persisted in the instance's saved parameters, not set by any of our code or the airframe file). RTL climbs to `max(current_altitude, home_altitude + RTL_RETURN_ALT)` before flying home -- a legitimate, correct computation, just slower than the 60m default would be. Not a bug; just worth knowing when RTL "seems to be taking forever."
+- Fixed-wing RTL's climb phase uses `NAV_CMD_LOITER_TO_ALT` -- the aircraft deliberately circles in place while climbing to the target altitude before flying home. Seeing the aircraft loiter without translating during this phase is expected, not stuck (distinct from the sharp-turn bug above, which *was* a genuine stuck state).
+- Verified full loop end-to-end via the real API/UI: place waypoints -> validate/upload (geofence, altitude, min-separation, turn-angle, and the landing-item/speed fixes above all exercised) -> arm -> fly the route -> trigger RTL -> climb -> fly home -> land -> auto-disarm. PX4's own log is the authoritative confirmation of landing (`Mission finished, landed` / `Landing detected` / `Disarmed by landing`) -- telemetry can appear to "pause" for several seconds around touchdown/rollout without anything being wrong.
+
 ## Status
 
-Phase 1 baseline (standalone PX4 fixed-wing SITL, arms and flies an uploaded mission) is working. Milestone 1's remaining acceptance criteria (custom backend/frontend, live map, mission upload through our own API, simulated network outage) are not yet started — that's Phase 2/3. Network fault injection tooling (Phase 5) not yet started; will be filled in with actual tool choices once Phase 2/3 are complete.
+Milestone 1's core loop (SITL, backend, frontend, mission upload/validation/execution, live telemetry, emergency RTL) is working end-to-end. Remaining Milestone 1 item: simulated network outage + failsafe response (Phase 4/5 territory, not yet started). Network fault injection tooling (Phase 5) not yet started; will be filled in with actual tool choices once that phase begins.

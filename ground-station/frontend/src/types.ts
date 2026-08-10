@@ -23,4 +23,16 @@ export interface VehicleState {
 
   is_gps_ok: boolean;
   is_armable: boolean;
+
+  mission_uploaded: boolean;
+  mission_current: number | null;
+  mission_total: number | null;
 }
+
+// Mirrors app.mission.Waypoint on the backend.
+export interface Waypoint {
+  latitude_deg: number;
+  longitude_deg: number;
+  altitude_m: number;
+}
+
