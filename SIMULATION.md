@@ -20,8 +20,8 @@ Simulation backend: **SIH** ("Simulation In Hardware"), not jMAVSim. jMAVSim onl
 - [x] Mission uploads to PX4 and the aircraft confirms receipt (visible in UI)
 - [x] Operator starts the mission; aircraft flies it autonomously in SITL
 - [x] Telemetry streams live to the dashboard throughout
-- [ ] A simulated network outage (backend↔MAVSDK link, not PX4 itself) is triggered manually
-- [ ] Aircraft continues flying safely / applies a sane failsafe response, independent of the interrupted link
+- [x] A simulated network outage (backend↔MAVSDK link, not PX4 itself) is triggered manually
+- [x] Aircraft continues flying safely / applies a sane failsafe response, independent of the interrupted link
 
 ## Milestone 2 — Simulated Ground/Aircraft Network Split
 
@@ -88,6 +88,12 @@ Several real bugs surfaced testing this end-to-end, beyond the mission-plan itse
 - **Mission cruise speed should match the airframe's actual trim airspeed**, not an arbitrary round number. Commanding a cruise speed above `FW_AIRSPD_TRIM` (15 m/s for this airframe) was suspected of making the altitude controller trade altitude for airspeed. `DEFAULT_CRUISE_SPEED_M_S` set to 15 to match.
 - **The most severe symptom hit in this phase -- consistently losing the aircraft approaching a specific waypoint, airspeed collapsing to a fraction of trim, altitude never converging, no combination of mission-side fixes helping -- turned out to be a degraded WSL2 VM, not a bug in any of our code.** This development session spanned several real days with the host machine sleeping in between. Restarting the `px4` *process* never fixed it, because the underlying WSL2 *VM* stayed up and degraded across those restarts -- its internal clock/scheduling appears to have been disrupted by suspend/resume, and PX4's SIH physics integration depends on that clock for lockstep timing. Fix: `wsl --shutdown` (from Windows, not from inside WSL) to fully restart the VM, then relaunch SITL fresh. The identical mission that was stuck at 7.8 m/s airspeed and 0/4 progress for 100+ seconds flew flawlessly immediately after. **Takeaway: if PX4 SITL behavior degrades inexplicably after a long-running or multi-day WSL session and process-level restarts don't help, restart the WSL VM itself before chasing application-level causes.**
 
+## Network Outage Findings
+
+Full test definition and result: [`tests/simulation/network_outage_during_mission.md`](tests/simulation/network_outage_during_mission.md).
+
+Summary: killed the backend entirely mid-mission (armed, mode `MISSION`, waypoint 2/3). PX4 logged `Connection to ground station lost` purely informationally and continued the mission to completion -- landed and disarmed autonomously with the backend confirmed dead the whole time (current `NAV_DLL_ACT=0`, data-link-loss failsafe disabled, so this is the expected result given that config, not a coincidence). Backend, once restarted, reconnected and synced to the aircraft's real post-outage state within seconds rather than showing stale data. This is the empirical confirmation of `ARCHITECTURE.md`'s core claim: the ground backend is non-critical, and its disappearance does not threaten flight safety once a mission is airborne.
+
 ## Status
 
-Milestone 1's core loop (SITL, backend, frontend, mission upload/validation/execution, live telemetry, emergency RTL) is working end-to-end. Remaining Milestone 1 item: simulated network outage + failsafe response (Phase 4/5 territory, not yet started). Network fault injection tooling (Phase 5) not yet started; will be filled in with actual tool choices once that phase begins.
+**Milestone 1 is complete.** SITL, backend, frontend, mission upload/validation/execution, live telemetry, emergency RTL, and the network-outage/failsafe behavior are all working end-to-end and verified against live PX4 SITL. Next up is Phase 4 (simulated ground/aircraft network split with WireGuard, per Milestone 2 above) and Phase 5 (systematic network fault injection -- latency, packet loss, reconnection -- beyond the single outage test done here).

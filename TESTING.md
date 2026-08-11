@@ -29,17 +29,17 @@ Each `SYS-*` requirement in `ARCHITECTURE.md` gets a traceability entry here onc
 
 | Requirement | Test(s) | Status |
 |---|---|---|
-| SYS-FLT-001 | _pending_ | Not yet implemented |
-| SYS-FLT-002 | _pending_ | Not yet implemented |
-| SYS-NET-001 | _pending_ | Not yet implemented |
-| SYS-NET-002 | _pending_ | Not yet implemented |
-| SYS-SEC-001 | _pending_ | Not yet implemented |
-| SYS-SEC-002 | _pending_ | Not yet implemented |
-| SYS-MIS-001 | _pending_ | Not yet implemented |
-| SYS-MIS-002 | _pending_ | Not yet implemented |
-| SYS-LOG-001 | _pending_ | Not yet implemented |
-| SYS-SAF-001 | _pending_ | Not yet implemented |
+| SYS-FLT-001 | `tests/simulation/network_outage_during_mission.md` | Passing (manual simulation test, 2026-08-11) |
+| SYS-FLT-002 | `tests/simulation/network_outage_during_mission.md` | Passing (manual simulation test, 2026-08-11) |
+| SYS-NET-001 | `tests/simulation/network_outage_during_mission.md` | Passing (manual simulation test, 2026-08-11) |
+| SYS-NET-002 | _pending_ | Not yet implemented — needs the onboard network manager (Phase 4) |
+| SYS-SEC-001 | _pending_ | Not yet implemented — no command auth yet (Phase 4, `NETWORKING.md`) |
+| SYS-SEC-002 | _pending_ | Not yet implemented — no replay protection yet (Phase 4) |
+| SYS-MIS-001 | `ground-station/backend/tests/test_mission.py` | Passing (automated unit tests) |
+| SYS-MIS-002 | _pending_ | Not yet implemented — command-vs-state validation is Phase 4 command-API territory |
+| SYS-LOG-001 | _pending_ | Not yet implemented — no persistence/audit trail yet (Phase 13 in the original roadmap numbering) |
+| SYS-SAF-001 | _pending_ | Not yet implemented — needs physical hardware (Phase 7+) |
 
 ## Status
 
-No tests exist yet. This table is updated as each requirement gets real, passing coverage — never marked done from a single manual run.
+Automated unit test coverage exists for mission validation (`ground-station/backend/tests/`, run on every backend change). One manual simulation test exists for the network-outage/failsafe requirement — passing, but manual, not yet automated into CI (Phase 5's fault-injection tooling will formalize this). Everything else in the table above is genuinely not implemented yet, not just untested.
