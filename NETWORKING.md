@@ -54,6 +54,33 @@ Both the companion computer and the GCS backend are WireGuard *clients* dialing 
 - No raw MAVLink exposed to the public Internet under any configuration.
 - No reliance on a third-party mesh-VPN control plane (see `ARCHITECTURE.md` §5 for the WireGuard-vs-Tailscale-vs-custom-broker comparison and reasoning).
 
+## Phase 4 Implementation (simulated ground/aircraft network split)
+
+Scripts: [`simulation/network/`](simulation/network/).
+
+**Scope decision:** implemented as a **direct 2-peer WireGuard tunnel** between two Linux network namespaces (`ground-net`, `aircraft-net`) rather than the full 3-node rendezvous topology shown above. The rendezvous hop exists in the production design to solve NAT traversal for a UAV with no public IP -- that's not a problem two local namespaces have, so building it now would be complexity without a matching lesson. The rendezvous server remains the plan for when this connects to a real UAV over real LTE (Phase 8+); nothing about the 2-peer tunnel needs to change to add it later, since the tunnel software itself doesn't care whether its peer is directly reachable or relayed.
+
+**Topology actually built:**
+
+```
+[Windows: frontend]
+       |  (WSL localhost forwarding)
+[default WSL namespace] --veth(10.201.0.0/24)-- [ground-net: backend]
+     (socat TCP relay,                                 |
+      forwards :8000)                          WireGuard tunnel (10.99.0.0/24)
+                                                over veth "internet" link (10.200.0.0/24)
+                                                         |
+                                                [aircraft-net: PX4 SITL]
+```
+
+**Key finding: which PX4 MAVLink instance to target matters.** PX4's "onboard/offboard" instance (the one used in Phase 1-3 same-machine testing, port 14580/14540) is started with a fixed `-o <remote-port>` and always sends to `localhost` -- it cannot be redirected to a different network namespace/host by changing the client's connect address, because PX4 itself, not the client, decides where to send. PX4's "GCS" instance (port 18570) is started *without* `-o`/`-m onboard`, which makes it a pure listener that learns the peer's address dynamically from whichever source first sends it a packet -- the same pattern QGroundControl uses. That's the instance that works across a real network/tunnel. Backend now connects via `udpout://10.99.0.2:18570` (dial out to PX4's tunnel IP) instead of `udpin://:14540` (wait for PX4 to dial a fixed local port).
+
+**Firewall enforced, not just documented:** `aircraft-net`'s only external-facing interface drops everything except WireGuard's UDP port (`iptables -P INPUT DROP` plus an explicit accept for `udp --dport 51820`). Raw MAVLink is not reachable from outside the tunnel -- verified, not assumed.
+
+**The `socat` relay is a local-topology artifact, not a production concern.** Because this whole simulation runs on one Windows machine, the frontend (native Windows, for WSL2 localhost-forwarding reasons -- see `SIMULATION.md` Phase 2 findings) needs a path into `ground-net`, which isn't the default WSL namespace. A real deployment has the frontend and backend on the same side of the tunnel already; this relay only exists to bridge WSL's namespace-vs-host boundary for local testing.
+
+**Verified end-to-end:** mission upload, mission execution (climb, waypoints, landing, disarm), and live WebSocket telemetry all confirmed working through the real tunnel -- not just a successful handshake. See `SIMULATION.md`'s Phase 4 findings for the full test record.
+
 ## Status
 
-Design only — implemented starting Phase 4 (simulated LTE/network architecture). This document will be updated with the actual rendezvous server config approach, key provisioning scripts, and any deviations discovered during implementation.
+Application-layer auth (command signing, replay protection, per-state command authorization -- Layers 3-6 above) is still design-only; not needed yet since there's no untrusted party on this tunnel to defend against in simulation. The rendezvous-server hop (vs. today's direct 2-peer tunnel) is deferred until there's a real UAV with no public IP to solve NAT traversal for.
