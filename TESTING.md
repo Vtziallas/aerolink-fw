@@ -29,9 +29,9 @@ Each `SYS-*` requirement in `ARCHITECTURE.md` gets a traceability entry here onc
 
 | Requirement | Test(s) | Status |
 |---|---|---|
-| SYS-FLT-001 | `tests/simulation/network_outage_during_mission.md` | Passing (manual simulation test, 2026-08-11) |
-| SYS-FLT-002 | `tests/simulation/network_outage_during_mission.md` | Passing (manual simulation test, 2026-08-11) |
-| SYS-NET-001 | `tests/simulation/network_outage_during_mission.md` | Passing (manual simulation test, 2026-08-11) |
+| SYS-FLT-001 | `network_outage_during_mission.md`, `latency_injection.md`, `packet_loss_injection.md`, `link_interruption_reconnection.md` | Passing (manual simulation tests, 2026-08-11) |
+| SYS-FLT-002 | `network_outage_during_mission.md`, `link_interruption_reconnection.md` | Passing (manual simulation tests, 2026-08-11) |
+| SYS-NET-001 | `network_outage_during_mission.md`, `link_interruption_reconnection.md` | Passing (manual simulation tests, 2026-08-11) |
 | SYS-NET-002 | _pending_ | Not yet implemented — needs the onboard network manager (Phase 4) |
 | SYS-SEC-001 | _pending_ | Not yet implemented — no command auth yet (Phase 4, `NETWORKING.md`) |
 | SYS-SEC-002 | _pending_ | Not yet implemented — no replay protection yet (Phase 4) |
@@ -40,7 +40,8 @@ Each `SYS-*` requirement in `ARCHITECTURE.md` gets a traceability entry here onc
 | SYS-LOG-001 | _pending_ | Not yet implemented — no persistence/audit trail yet (Phase 13 in the original roadmap numbering) |
 | SYS-SAF-001 | _pending_ | Not yet implemented — needs physical hardware (Phase 7+) |
 | SYS-SEC-003 | `tests/simulation/network_split_isolation.md` | Passing (manual simulation test, 2026-08-11) |
+| SYS-SAF-002 | `tests/simulation/battery_failsafe.md` | Passing (manual simulation test, 2026-08-11) |
 
 ## Status
 
-Automated unit test coverage exists for mission validation (`ground-station/backend/tests/`, run on every backend change). Two manual simulation tests exist (network-outage/failsafe, and network-split isolation) — both passing, but manual, not yet automated into CI (Phase 5's fault-injection tooling will formalize this). Everything else in the table above is genuinely not implemented yet, not just untested.
+Automated unit test coverage exists for mission validation (`ground-station/backend/tests/`, run on every backend change). Six manual simulation tests exist in `tests/simulation/` (network-outage/failsafe, network-split isolation, latency, packet loss, link interruption/reconnection, battery failsafe) — all passing, but manual, not yet automated into CI (formalizing that is Phase 5/6 follow-up work, not done). Everything else in the table above is genuinely not implemented yet, not just untested.

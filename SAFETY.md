@@ -36,20 +36,25 @@ stateDiagram-v2
     LANDED --> [*]
 ```
 
-## Event → Response Policy (initial, to be refined in Phase 6)
+## Event → Response Policy
 
-| Event | If in TAKEOFF/MISSION | If in LOITER/RTH |
-|---|---|---|
-| `LTE_LOST` | Continue current mission leg for a configured grace period, then LOITER | No change — already degraded-mode safe |
-| `LTE_RESTORED` | Resync telemetry, accept new commands | Resync, operator may resume mission |
-| `GPS_DEGRADED` | → FAILSAFE, evaluate severity | → FAILSAFE |
-| `GPS_LOST` | → EMERGENCY | → EMERGENCY |
-| `LOW_BATTERY` | → RETURN_TO_HOME | continue RTH |
-| `CRITICAL_BATTERY` | → EMERGENCY (immediate land) | → EMERGENCY |
-| `GEOFENCE_BREACH` | → EMERGENCY | → EMERGENCY |
-| `COMPANION_COMPUTER_ERROR` | PX4 falls back to its own built-in RC/GPS failsafes, independent of the companion computer | same |
+| Event | If in TAKEOFF/MISSION | If in LOITER/RTH | Verified |
+|---|---|---|---|
+| `LTE_LOST` | Mission continues completely unaffected (see note below) | No change | Yes — `tests/simulation/network_outage_during_mission.md`, `link_interruption_reconnection.md` |
+| `LTE_RESTORED` | Resync telemetry, accept new commands | Resync, operator may resume mission | Yes — same tests, backend auto-resyncs without a restart |
+| `GPS_DEGRADED` | → FAILSAFE, evaluate severity | → FAILSAFE | Not yet tested |
+| `GPS_LOST` | → EMERGENCY | → EMERGENCY | Not yet tested |
+| `LOW_BATTERY` | Warning, no mode change (below `BAT_LOW_THR`, 15%) | same | Yes — `tests/simulation/battery_failsafe.md` |
+| `CRITICAL_BATTERY` | → RETURN_TO_HOME (below `BAT_CRIT_THR`, 7%) | continue | Yes — same test |
+| `EMERGENCY_BATTERY` | → EMERGENCY, immediate land (below `BAT_EMERGEN_THR`, 5%) | → EMERGENCY | Yes — same test |
+| `GEOFENCE_BREACH` | → EMERGENCY | → EMERGENCY | Not yet tested |
+| `COMPANION_COMPUTER_ERROR` | PX4 falls back to its own built-in RC/GPS failsafes, independent of the companion computer | same | Not yet tested (no separate companion process exists yet) |
 
-Key principle: LTE loss alone never escalates past LOITER/RTH. Only degradation of flight-safety-relevant signals (GPS, battery, geofence) escalates to FAILSAFE/EMERGENCY.
+**Note on `LTE_LOST`, design vs. actual:** the original design here called for "continue current leg for a grace period, then LOITER" -- a policy-based partial degradation. What's actually configured and tested is simpler: PX4's `NAV_DLL_ACT=0` means an active mission is entirely unaffected by data-link loss, for any duration, with no automatic LOITER fallback at all. This is not a shortfall against the core principle (LTE loss still never threatens flight safety -- if anything it's *more* permissive, since PX4 doesn't second-guess an already-validated mission at all), but it does mean the "grace period then LOITER" policy as originally worded isn't implemented. That would require either a different PX4 configuration (an actual timeout-based `NAV_DLL_ACT` value) or the future onboard mission agent making that call itself -- worth revisiting once that component exists, not before.
+
+**Note on battery events:** split into three tiers matching PX4's real parameters (`BAT_LOW_THR`/`BAT_CRIT_THR`/`BAT_EMERGEN_THR`) rather than the original two (`LOW_BATTERY`/`CRITICAL_BATTERY`), since that's what PX4 actually implements and what we tested against.
+
+Key principle, confirmed by testing, not just asserted: LTE loss alone never escalates past normal operation. Only degradation of flight-safety-relevant signals (battery, confirmed; GPS/geofence, not yet tested) escalates toward FAILSAFE/EMERGENCY.
 
 ## Independent Safety Override
 
@@ -65,4 +70,4 @@ Normal operation is PC/GCS-based, not joystick flying. Real-world flight testing
 
 ## Status
 
-No physical flight has occurred. This document currently describes the *design* of the failsafe system for Phases 0–6 (simulation). It will be updated with real test evidence as Phases 7–9 are reached, and nothing here should be read as validated behavior until backed by a passing fault-injection or flight test.
+No physical flight has occurred. Link-loss and battery-failsafe behavior are now backed by real, passing simulation tests (see the table above); GPS degradation/loss, geofence breach, and companion-computer-error are still design-only. This document will continue to be updated with real test evidence as Phases 6-9 are reached, and nothing here should be read as validated behavior until backed by a passing fault-injection or flight test.

@@ -148,6 +148,7 @@ sequenceDiagram
 | SYS-LOG-001 | The system shall persist significant command and flight-state events with timestamps sufficient to reconstruct a flight timeline. |
 | SYS-SAF-001 | Real-world flight testing shall provide an independent safety-override capability that does not depend on the companion computer or LTE link. |
 | SYS-SEC-003 | The onboard MAVLink/flight-control interface shall not be reachable from the network except through the authenticated WireGuard tunnel. |
+| SYS-SAF-002 | The aircraft shall autonomously execute a safe recovery action (return-to-home, then landing) when battery charge drops below configured thresholds, independent of ground station commands. |
 
 Each requirement maps to at least one test (unit/integration/simulation/HIL/flight); the traceability matrix will live alongside `TESTING.md` as tests are added.
 
