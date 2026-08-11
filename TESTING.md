@@ -39,7 +39,8 @@ Each `SYS-*` requirement in `ARCHITECTURE.md` gets a traceability entry here onc
 | SYS-MIS-002 | _pending_ | Not yet implemented — command-vs-state validation is Phase 4 command-API territory |
 | SYS-LOG-001 | _pending_ | Not yet implemented — no persistence/audit trail yet (Phase 13 in the original roadmap numbering) |
 | SYS-SAF-001 | _pending_ | Not yet implemented — needs physical hardware (Phase 7+) |
+| SYS-SEC-003 | `tests/simulation/network_split_isolation.md` | Passing (manual simulation test, 2026-08-11) |
 
 ## Status
 
-Automated unit test coverage exists for mission validation (`ground-station/backend/tests/`, run on every backend change). One manual simulation test exists for the network-outage/failsafe requirement — passing, but manual, not yet automated into CI (Phase 5's fault-injection tooling will formalize this). Everything else in the table above is genuinely not implemented yet, not just untested.
+Automated unit test coverage exists for mission validation (`ground-station/backend/tests/`, run on every backend change). Two manual simulation tests exist (network-outage/failsafe, and network-split isolation) — both passing, but manual, not yet automated into CI (Phase 5's fault-injection tooling will formalize this). Everything else in the table above is genuinely not implemented yet, not just untested.

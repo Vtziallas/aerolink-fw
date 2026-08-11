@@ -79,7 +79,7 @@ Scripts: [`simulation/network/`](simulation/network/).
 
 **The `socat` relay is a local-topology artifact, not a production concern.** Because this whole simulation runs on one Windows machine, the frontend (native Windows, for WSL2 localhost-forwarding reasons -- see `SIMULATION.md` Phase 2 findings) needs a path into `ground-net`, which isn't the default WSL namespace. A real deployment has the frontend and backend on the same side of the tunnel already; this relay only exists to bridge WSL's namespace-vs-host boundary for local testing.
 
-**Verified end-to-end:** mission upload, mission execution (climb, waypoints, landing, disarm), and live WebSocket telemetry all confirmed working through the real tunnel -- not just a successful handshake. See `SIMULATION.md`'s Phase 4 findings for the full test record.
+**Verified end-to-end:** mission upload, mission execution (climb, waypoints, landing, disarm), and live WebSocket telemetry all confirmed working through the real tunnel -- not just a successful handshake. Full test record: [`tests/simulation/network_split_isolation.md`](tests/simulation/network_split_isolation.md).
 
 ## Status
 

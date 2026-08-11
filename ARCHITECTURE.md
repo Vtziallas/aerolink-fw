@@ -147,6 +147,7 @@ sequenceDiagram
 | SYS-MIS-002 | The system shall reject a command that is not valid for the aircraft's current flight state. |
 | SYS-LOG-001 | The system shall persist significant command and flight-state events with timestamps sufficient to reconstruct a flight timeline. |
 | SYS-SAF-001 | Real-world flight testing shall provide an independent safety-override capability that does not depend on the companion computer or LTE link. |
+| SYS-SEC-003 | The onboard MAVLink/flight-control interface shall not be reachable from the network except through the authenticated WireGuard tunnel. |
 
 Each requirement maps to at least one test (unit/integration/simulation/HIL/flight); the traceability matrix will live alongside `TESTING.md` as tests are added.
 
