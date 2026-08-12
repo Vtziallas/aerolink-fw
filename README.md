@@ -2,7 +2,7 @@
 
 Experimental cellular-connected autonomous fixed-wing UAV platform.
 
-> **Status:** Phase 0 — architecture and planning. No flight code yet. This README will be filled out (demo video, results, "what I learned") as milestones are actually completed — nothing here is claimed until it's implemented and tested.
+> **Status:** Phases 0-6 complete and verified in simulation — PX4 SITL, custom ground-station backend/frontend, mission upload/validation/execution, a real WireGuard-tunneled network split, network fault injection (latency, packet loss, link interruption), and failsafe testing (battery, geofence) all working end-to-end against live PX4 SITL. No physical hardware yet; Phase 7 (HIL/bench) requirements are being defined in `HARDWARE.md`. This README will be filled out further (demo video, results, "what I learned") as later milestones complete — nothing here is claimed until it's implemented and tested.
 
 ## Overview
 
@@ -43,7 +43,7 @@ Details in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 - [`SAFETY.md`](SAFETY.md) — failsafe state machine, safety requirements
 - [`NETWORKING.md`](NETWORKING.md) — secure ground/air network design
 - [`SIMULATION.md`](SIMULATION.md) — SITL and fault-injection approach
-- [`HARDWARE.md`](HARDWARE.md) — hardware requirements (filled in ahead of Phase 7/8)
+- [`HARDWARE.md`](HARDWARE.md) — hardware requirements, being defined for Phase 7/8
 - [`TESTING.md`](TESTING.md) — testing levels and philosophy
 - [`FLIGHT_TEST_PLAN.md`](FLIGHT_TEST_PLAN.md) — lawful VLOS flight test procedure (Phase 9)
 - [`docs/adr/`](docs/adr/) — architecture decision records
