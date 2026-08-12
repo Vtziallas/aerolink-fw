@@ -10,6 +10,8 @@ Everything runs on a single dev PC, no hardware required.
 
 Simulation backend: **SIH** ("Simulation In Hardware"), not jMAVSim. jMAVSim only models multicopter aerodynamics — there is no fixed-wing jMAVSim airframe in this PX4 version. SIH runs the flight dynamics model inside the PX4 binary itself (no external simulator process, no GUI/OpenGL dependency), which is also what makes it reliable under WSL2. Gazebo Classic remains an option later if a 3D visual is wanted for the portfolio demo; SIH is sufficient for control/mission validation. Build target: `make px4_sitl sihsim_airplane` (confirmed for v1.17.0 by reading `ROMFS/px4fmu_common/init.d-posix/airframes/10041_sihsim_airplane`, not assumed).
 
+> **VTOL note:** everything in Milestones 1-2 and the Phase 1-6 findings below was built and validated against `sihsim_airplane` (pure fixed-wing), before the [QuadPlane VTOL decision](docs/adr/0002-quadplane-vtol-airframe.md). It remains accurate as a record of what was actually done and stays reusable for the software/network/failsafe-pattern layers (see that ADR's Consequences section), but none of the flight-dynamics-specific tuning below (turn-angle limits, RTL climb/landing-approach behavior, acceptance radius, trim-speed matching) should be assumed to still hold under `sihsim_standard_vtol` (confirmed to exist at `ROMFS/px4fmu_common/init.d-posix/airframes/10043_sihsim_standard_vtol`, matching the Stork's 4-lift+1-pusher layout) until re-run and re-verified against it. Treat this whole section as "what we learned about PX4 fixed-wing SITL," not "what's currently true of this aircraft."
+
 **Acceptance criteria:**
 
 - [x] PX4 fixed-wing SITL launches and reaches a flyable state
@@ -112,6 +114,18 @@ Geofence: [`tests/simulation/geofence_breach.md`](tests/simulation/geofence_brea
 GPS degradation/loss: not attempted. PX4's failure-injection command (`MAV_CMD_INJECT_FAILURE`) is confirmed (by reading the source) to only be wired up for the `simulator_mavlink` backend, not SIH. Testing this cleanly needs the Gazebo/mavlink-simulator backend, deliberately avoided since Phase 1 for good reasons (WSL2 GUI/OpenGL complexity) -- revisit if that tradeoff ever changes.
 
 `SAFETY.md`'s event/response table was reconciled with all of the above: verified rows now say so, design-only rows still say so, and the `LTE_LOST` design was corrected to match what's actually configured (simpler than originally specified, not a shortfall -- see that document).
+
+## VTOL Re-Validation Needed (before Phase 7 relies on any of the above)
+
+The [QuadPlane VTOL decision](docs/adr/0002-quadplane-vtol-airframe.md) landed after Phase 6 was already complete against `sihsim_airplane`. Before that Phase 1-6 work is trusted for the actual target aircraft, it needs to be re-run against `sihsim_standard_vtol` (`PX4_SIM_MODEL=sihsim_standard_vtol`, same daemon-mode launch pattern as the Phase 1 findings above) and checked for the following, none of which is assumed to transfer automatically:
+
+- **Mission tuning parameters** (`MAX_TURN_ANGLE_DEG`, `MIN_WAYPOINT_SEPARATION_M`, `DEFAULT_ACCEPTANCE_RADIUS_M`, `DEFAULT_CRUISE_SPEED_M_S` in `app/config.py`) were all empirically tuned against fixed-wing cornering/trim behavior (Phase 3 findings above) -- a VTOL's cruise-phase flight dynamics may be similar (same wing, same control surfaces) but this has not been verified, and hover/transition phases have no equivalent tuning at all yet.
+- **RTL behavior** (climb-to-`RTL_RETURN_ALT` via `NAV_CMD_LOITER_TO_ALT`, landing-approach geometry) may differ under VTOL -- a Standard VTOL can transition back to hover and land vertically rather than needing a fixed-wing glide/landing-item approach, which could change or simplify the landing-item requirement noted in Phase 1 findings, but this is unverified.
+- **The landing-item requirement itself** (Phase 1 finding: fixed-wing missions reject without an explicit landing item) needs to be re-checked against `sihsim_standard_vtol` -- may behave differently given vertical-landing capability.
+- **GPS degradation/loss testing** is still blocked on simulator backend (`MAV_CMD_INJECT_FAILURE` only wired up for `simulator_mavlink`, not SIH) regardless of airframe type -- this constraint doesn't change with the VTOL decision.
+- New hover/transition-specific scenarios that simply didn't exist before (`LIFT_MOTOR_FAILURE`, `TRANSITION_FAILURE` -- see `SAFETY.md`'s Event → Response table) have no simulation test at all yet, design-only.
+
+None of Phase 1-6's checkmarks above should be read as "done for the VTOL" -- they're an accurate record of what was verified for the airframe that existed at the time.
 
 ## Status
 

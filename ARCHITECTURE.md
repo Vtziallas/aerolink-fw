@@ -4,6 +4,8 @@
 
 A PC-based Ground Control Station (GCS) composes and validates missions and sends high-level, application-level commands (never raw control-surface commands) over a secured 4G/LTE link to a Linux companion computer onboard the aircraft. The companion computer relays validated commands to a PX4 flight controller via MAVSDK/MAVLink, which performs all real-time stabilization, navigation, and failsafe behavior. The aircraft remains safe and continues or gracefully aborts its mission with zero dependency on the cellular link, the ground backend, or the browser.
 
+**Airframe:** a QuadPlane VTOL (four vertical-lift motors for takeoff/landing/hover, plus a rear pusher motor and conventional control surfaces for forward cruise flight) -- PX4's "Standard VTOL" type. See [`docs/adr/0002-quadplane-vtol-airframe.md`](docs/adr/0002-quadplane-vtol-airframe.md) for why, and for what does/doesn't carry over from the pure-fixed-wing work in Phases 1-6.
+
 ## 2. System Diagram
 
 ```mermaid
@@ -73,7 +75,7 @@ flowchart TB
 
 | Layer | Choice | Reasoning |
 |---|---|---|
-| Flight controller firmware | PX4, current stable release | Mature fixed-wing support, active failsafe logic, large community. |
+| Flight controller firmware | PX4, current stable release | Mature Standard VTOL (QuadPlane) support, active failsafe logic, large community. |
 | GCS Frontend | React + TypeScript, MapLibre GL | Existing skill; MapLibre avoids Google Maps licensing/key issues. |
 | GCS Backend | Python + FastAPI | Async-native for WebSocket telemetry fan-out; shared language with simulation/analysis tooling. |
 | Onboard Mission Agent | C++ + MAVSDK | Deliberate C++ learning vehicle; MAVSDK gives a typed abstraction over MAVLink. |
@@ -132,6 +134,8 @@ sequenceDiagram
 | 7 | Hardware-in-the-loop / bench testing |
 | 8 | Physical aircraft integration |
 | 9 | Controlled, lawful VLOS flight testing |
+
+Phase 1's "fixed-wing SITL" reflects what was actually built at the time -- the airframe decision (QuadPlane VTOL, see [ADR 0002](docs/adr/0002-quadplane-vtol-airframe.md)) came after Phase 6. Software/networking/failsafe-pattern work from Phases 1-6 carries over; fixed-wing-specific flight-dynamics tuning needs re-validation against PX4's `sihsim_standard_vtol` model before Phase 7 hardware work relies on it.
 
 ## 8. System Requirements (initial set)
 
