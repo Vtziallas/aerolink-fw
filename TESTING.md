@@ -41,8 +41,8 @@ Each `SYS-*` requirement in `ARCHITECTURE.md` gets a traceability entry here onc
 | SYS-SAF-001 | _pending_ | Not yet implemented — needs physical hardware (Phase 7+) |
 | SYS-SEC-003 | `tests/simulation/network_split_isolation.md` | Passing (manual simulation test, 2026-08-11) |
 | SYS-SAF-002 | `tests/simulation/battery_failsafe.md` | Passing (manual simulation test, 2026-08-11) |
-| SYS-SAF-003 | `tests/simulation/geofence_breach.md` | Partial — pre-flight enforcement passing, in-flight breach not yet demonstrated (2026-08-11) |
+| SYS-SAF-003 | `tests/simulation/geofence_breach.md` | Passing (pre-flight enforcement 2026-08-11, in-flight breach 2026-08-12) |
 
 ## Status
 
-Automated unit test coverage exists for mission validation (`ground-station/backend/tests/`, run on every backend change). Seven manual simulation tests exist in `tests/simulation/` (network-outage/failsafe, network-split isolation, latency, packet loss, link interruption/reconnection, battery failsafe, geofence breach) — six fully passing, one (geofence) partial with the gap honestly documented in the test itself. None are yet automated into CI (formalizing that is Phase 5/6 follow-up work, not done). Everything else in the table above is genuinely not implemented yet, not just untested.
+Automated unit test coverage exists for mission validation (`ground-station/backend/tests/`, run on every backend change). Seven manual simulation tests exist in `tests/simulation/` (network-outage/failsafe, network-split isolation, latency, packet loss, link interruption/reconnection, battery failsafe, geofence breach) — all passing. None are yet automated into CI (formalizing that is Phase 5/6 follow-up work, not done). Everything else in the table above is genuinely not implemented yet, not just untested.

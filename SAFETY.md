@@ -47,14 +47,16 @@ stateDiagram-v2
 | `LOW_BATTERY` | Warning, no mode change (below `BAT_LOW_THR`, 15%) | same | Yes — `tests/simulation/battery_failsafe.md` |
 | `CRITICAL_BATTERY` | → RETURN_TO_HOME (below `BAT_CRIT_THR`, 7%) | continue | Yes — same test |
 | `EMERGENCY_BATTERY` | → EMERGENCY, immediate land (below `BAT_EMERGEN_THR`, 5%) | → EMERGENCY | Yes — same test |
-| `GEOFENCE_BREACH` | Pre-flight: refused outright (confirmed). In-flight: → Return mode per `GF_ACTION` (not yet cleanly demonstrated) | → EMERGENCY | Partial — `tests/simulation/geofence_breach.md` |
+| `GEOFENCE_BREACH` | Pre-flight: refused outright. In-flight: → Return mode per `GF_ACTION` (loiters near home; does not yet auto-land — see note) | → EMERGENCY | Yes — `tests/simulation/geofence_breach.md` |
 | `COMPANION_COMPUTER_ERROR` | PX4 falls back to its own built-in RC/GPS failsafes, independent of the companion computer | same | Not yet tested (no separate companion process exists yet) |
 
 **Note on `LTE_LOST`, design vs. actual:** the original design here called for "continue current leg for a grace period, then LOITER" -- a policy-based partial degradation. What's actually configured and tested is simpler: PX4's `NAV_DLL_ACT=0` means an active mission is entirely unaffected by data-link loss, for any duration, with no automatic LOITER fallback at all. This is not a shortfall against the core principle (LTE loss still never threatens flight safety -- if anything it's *more* permissive, since PX4 doesn't second-guess an already-validated mission at all), but it does mean the "grace period then LOITER" policy as originally worded isn't implemented. That would require either a different PX4 configuration (an actual timeout-based `NAV_DLL_ACT` value) or the future onboard mission agent making that call itself -- worth revisiting once that component exists, not before.
 
 **Note on battery events:** split into three tiers matching PX4's real parameters (`BAT_LOW_THR`/`BAT_CRIT_THR`/`BAT_EMERGEN_THR`) rather than the original two (`LOW_BATTERY`/`CRITICAL_BATTERY`), since that's what PX4 actually implements and what we tested against.
 
-Key principle, confirmed by testing, not just asserted: LTE loss alone never escalates past normal operation. Only degradation of flight-safety-relevant signals escalates toward FAILSAFE/EMERGENCY -- confirmed for battery; confirmed for geofence at the pre-flight gate (PX4 independently refuses a mission that violates its own configured fence, even if our backend's own check were ever bypassed); GPS degradation/loss not yet tested at all (see `tests/simulation/geofence_breach.md` for why -- PX4's failure-injection mechanism isn't available with our current SIH simulator backend).
+**Note on `GEOFENCE_BREACH` recovery:** the failsafe-triggered Return ends in an indefinite loiter near home, not an automatic landing -- distinct from a normal mission's own RTL-with-landing-item flow. Bringing the aircraft down the rest of the way currently needs an explicit follow-up command; there is no "resume mission" or "land now" control in the ground station yet (same gap noted for the RTL-after-latency-test scenario in `tests/simulation/latency_injection.md`). Worth adding to the mission panel.
+
+Key principle, confirmed by testing, not just asserted: LTE loss alone never escalates past normal operation. Only degradation of flight-safety-relevant signals escalates toward FAILSAFE/EMERGENCY -- confirmed for battery; confirmed for geofence, both at the pre-flight gate and for a genuine in-flight breach (PX4 independently enforces its own configured fence, even if our backend's own check were ever bypassed); GPS degradation/loss not yet tested at all (see `tests/simulation/geofence_breach.md` for why -- PX4's failure-injection mechanism isn't available with our current SIH simulator backend).
 
 ## Independent Safety Override
 
@@ -70,4 +72,4 @@ Normal operation is PC/GCS-based, not joystick flying. Real-world flight testing
 
 ## Status
 
-No physical flight has occurred. Link-loss and battery-failsafe behavior are backed by real, passing simulation tests (see the table above); geofence enforcement is confirmed at the pre-flight gate but not yet for an in-flight breach; GPS degradation/loss and companion-computer-error are still design-only. This document will continue to be updated with real test evidence as Phases 6-9 are reached, and nothing here should be read as validated behavior until backed by a passing fault-injection or flight test.
+No physical flight has occurred. Link-loss, battery-failsafe, and geofence-breach (both pre-flight and in-flight) behavior are all backed by real, passing simulation tests (see the table above); GPS degradation/loss and companion-computer-error are still design-only. This document will continue to be updated with real test evidence as Phases 6-9 are reached, and nothing here should be read as validated behavior until backed by a passing fault-injection or flight test.
