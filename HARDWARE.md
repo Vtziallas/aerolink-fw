@@ -55,6 +55,15 @@ Before any category below can turn into an actual part number, these need answer
 
 **What I need to know before selecting:** UART port count required (companion link + GNSS + airspeed + reserve for telemetry radio during bench/RC testing = at least 3, ideally 4+); physical mounting envelope in whatever airframe gets chosen later (affects which board sizes are viable).
 
+**Candidates researched (2026-08-13), replacing the vendor's unsupported SpeedyBee F405 Wing suggestion:**
+
+| Board | Price (FC only) | PWM outputs | IMU | Serial ports | PX4 support tier |
+|---|---|---|---|---|---|
+| [Holybro Pixhawk 6C](https://holybro.com/products/pixhawk-6c) | ~$176 | 16 (8 MAIN + 8 AUX) | Dual redundant (ICM-42688-P + BMI055) | 8 (incl. 2 dedicated GPS) | Maintained by the PX4 team directly (reference-tier) |
+| [Holybro Pixhawk 6X](https://holybro.com/products/pixhawk-6x) | ~$167+ (varies a lot by bundle/carrier board) | 16 (8 MAIN + 8 AUX) | **Triple** redundant (3x ICM-45686) | 8 (incl. 2 dedicated GPS) + I2C | Maintained by the PX4 team directly (reference-tier) |
+
+Both clear the 8-output requirement with double the headroom (room for a future payload/gimbal servo without a board change) and both are explicitly "supported by the PX4 maintenance and test teams" -- the strongest support tier PX4 offers, not just "someone ported it once." Leaning toward the **6X**: at effectively the same price as the 6C for the standalone module, it adds the triple-IMU redundancy this doc already flagged as extra-valuable given the 4-lift-motor vibration environment, for no real cost tradeoff. Not yet a final decision -- **pricing is volatile and bundle-dependent** (standalone module vs. baseboard/cable-set bundles range from ~$167 to $300+, so get a real current quote before buying), and physical fit inside the Stork's payload bay (Pixhawk 6C's footprint is 84.8 x 44 x 12.4mm, 6X is similar) hasn't been checked against the actual STL yet.
+
 ### Companion computer (Phase 7)
 
 **Why it exists:** the mission-critical tier -- runs the (future) onboard mission agent, telemetry agent, network manager, and the LTE/WireGuard link. See `ARCHITECTURE.md` §4.
@@ -220,4 +229,6 @@ These aren't separate components -- they're constraints that any component selec
 
 ## Status
 
-Requirements definition underway (this document), now updated for the QuadPlane VTOL decision (see [ADR 0002](docs/adr/0002-quadplane-vtol-airframe.md)). No parts purchased. Phase 7 (HIL/bench) needs answers to the "Decisions Only I Can Make First" items above before the Phase-7-relevant categories (flight controller, companion computer, power module, GNSS, LTE modem/SIM, independent safety link) can turn into actual candidate parts. The flight controller category specifically is now gated on finding a board with *confirmed* official PX4 support -- the vendor's suggested SpeedyBee F405 Wing does not appear in PX4's supported board list (checked directly against `PX4-Autopilot/boards`), so this can't be assumed and needs to be resolved before any FC purchase.
+Requirements definition underway (this document), now updated for the QuadPlane VTOL decision (see [ADR 0002](docs/adr/0002-quadplane-vtol-airframe.md)). No parts purchased. Phase 7 (HIL/bench) needs answers to the "Decisions Only I Can Make First" items above before the remaining Phase-7-relevant categories (companion computer, power module, GNSS, LTE modem/SIM, independent safety link) can turn into actual candidate parts.
+
+**Flight controller: real candidates identified** (Holybro Pixhawk 6C/6X, see that section) -- both PX4-reference-tier supported, both clear the output/UART requirements with headroom. Not yet a final purchase decision: needs a current price quote and a physical-fit check against the Stork's actual payload bay once its STL is on hand.
