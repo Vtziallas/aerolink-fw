@@ -37,6 +37,16 @@ Before any category below can turn into an actual part number, these need answer
 - **Approximate budget** -- component categories below span an order of magnitude in cost depending on grade (hobby vs. semi-professional), and that mostly determines which specific parts are even worth researching. VTOL also means budgeting for *two* propulsion systems, not one.
 - **Test site constraints** (from `FLIGHT_TEST_PLAN.md`, once a real site is identified) -- matters less for takeoff/landing area now (VTOL needs much less clear space than a runway/hand-launch fixed-wing would), but still matters for cruise-phase airspace and any regulatory VTOL-specific considerations.
 
+## Procurement Strategy: V1 (Prototype) vs. V2 (Post-Validation)
+
+A first VTOL build from a first-time builder has a real, non-trivial chance of ending in a crash during initial flight-envelope validation -- untested transition tuning, an unexpected CG issue, a bad prop strike during early hover testing, or a dozen other first-flight failure modes that HIL/bench testing can't fully rule out. Rather than pretend otherwise, the procurement plan is deliberately two-tier:
+
+- **The airframe stays constant throughout** -- the same printed Stork QuadPlane structure (crashes damage it, but reprinting a airframe is cheap and fast relative to avionics).
+- **V1 (prototype/proving tier):** cheapest component that still has *confirmed* PX4 support and meets the hard requirements (output count, etc.) -- the goal is validating the flight envelope (hover stability, transition, basic mission execution) at minimum financial risk, accepting that this specific unit may not survive that process.
+- **V2 (post-validation tier):** once V1 has proven the airframe/tuning/mission-software stack actually flies as expected, upgrade the avionics that benefit most from being "done right" -- better IMU redundancy, more headroom, sturdier build -- without re-deriving anything about the airframe or software, since those were already validated on V1.
+
+This applies most obviously to the flight controller (see below), and likely extends to other categories (ESCs, GNSS grade) as they're researched -- not assumed to apply uniformly to every category without checking (e.g. a cheap battery is a false economy if it can't deliver the lift-motor system's peak current, regardless of prototype-vs-final framing).
+
 ## Component Categories
 
 ### Flight controller (Phase 7)
@@ -55,14 +65,15 @@ Before any category below can turn into an actual part number, these need answer
 
 **What I need to know before selecting:** UART port count required (companion link + GNSS + airspeed + reserve for telemetry radio during bench/RC testing = at least 3, ideally 4+); physical mounting envelope in whatever airframe gets chosen later (affects which board sizes are viable).
 
-**Candidates researched (2026-08-13), replacing the vendor's unsupported SpeedyBee F405 Wing suggestion:**
+**Candidates researched (2026-08-13), replacing the vendor's unsupported SpeedyBee F405 Wing suggestion.** Per the V1/V2 procurement strategy above, this is the category it applies to most directly -- an FC is exactly the kind of thing that can die in a bad first landing, and exactly the kind of thing worth not over-investing in before the airframe/tuning is proven:
 
-| Board | Price (FC only) | PWM outputs | IMU | Serial ports | PX4 support tier |
-|---|---|---|---|---|---|
-| [Holybro Pixhawk 6C](https://holybro.com/products/pixhawk-6c) | ~$176 | 16 (8 MAIN + 8 AUX) | Dual redundant (ICM-42688-P + BMI055) | 8 (incl. 2 dedicated GPS) | Maintained by the PX4 team directly (reference-tier) |
-| [Holybro Pixhawk 6X](https://holybro.com/products/pixhawk-6x) | ~$167+ (varies a lot by bundle/carrier board) | 16 (8 MAIN + 8 AUX) | **Triple** redundant (3x ICM-45686) | 8 (incl. 2 dedicated GPS) + I2C | Maintained by the PX4 team directly (reference-tier) |
+| Tier | Board | Price (FC only) | PWM outputs | IMU | Serial ports | PX4 support |
+|---|---|---|---|---|---|---|
+| **V1** | [Matek H743-WING](https://www.getfpv.com/matek-h743-wing-flight-controller.html) | ~$90-130 (varies by retailer) | 12 | Single (dual gyro parts across revisions, not redundant sensors) | 7 UART + 2 I2C + 1 CAN | Confirmed directly in PX4 source (`boards/matek/h743/`, `CONFIG_MODULES_VTOL_ATT_CONTROL=y` present) -- notably, the vendor only markets this board for ArduPilot/INAV, not PX4, so this is a source-verified finding, not a vendor claim |
+| **V2** | [Holybro Pixhawk 6C](https://holybro.com/products/pixhawk-6c) | ~$176 | 16 (8 MAIN + 8 AUX) | Dual redundant (ICM-42688-P + BMI055) | 8 (incl. 2 dedicated GPS) | Maintained by the PX4 team directly (reference-tier) |
+| **V2** | [Holybro Pixhawk 6X](https://holybro.com/products/pixhawk-6x) | ~$167+ (varies a lot by bundle/carrier board) | 16 (8 MAIN + 8 AUX) | **Triple** redundant (3x ICM-45686) | 8 (incl. 2 dedicated GPS) + I2C | Maintained by the PX4 team directly (reference-tier) |
 
-Both clear the 8-output requirement with double the headroom (room for a future payload/gimbal servo without a board change) and both are explicitly "supported by the PX4 maintenance and test teams" -- the strongest support tier PX4 offers, not just "someone ported it once." Leaning toward the **6X**: at effectively the same price as the 6C for the standalone module, it adds the triple-IMU redundancy this doc already flagged as extra-valuable given the 4-lift-motor vibration environment, for no real cost tradeoff. Not yet a final decision -- **pricing is volatile and bundle-dependent** (standalone module vs. baseboard/cable-set bundles range from ~$167 to $300+, so get a real current quote before buying), and physical fit inside the Stork's payload bay (Pixhawk 6C's footprint is 84.8 x 44 x 12.4mm, 6X is similar) hasn't been checked against the actual STL yet.
+All three clear the 8-output requirement with real headroom. The Matek is an FPV-style board (not Pixhawk-standard connector), which the Requirements above already said is fine if the output count works out -- and at 12 outputs, it does, with 4 spare. **V1 plan:** Matek H743-WING, roughly half the cost of either Pixhawk option, to validate hover/transition/mission behavior on the real airframe first. **V2 plan (once V1 flies successfully):** Pixhawk 6X over 6C -- at effectively the same price as the 6C for the standalone module, it adds triple-IMU redundancy for no real cost tradeoff, valuable given the 4-lift-motor vibration environment this doc already flagged. Not yet final purchase decisions for either tier -- **pricing is volatile and retailer/bundle-dependent** (get a real current quote before buying), and physical fit inside the Stork's payload bay hasn't been checked against the actual STL yet for any of the three.
 
 ### Companion computer (Phase 7)
 
@@ -231,4 +242,4 @@ These aren't separate components -- they're constraints that any component selec
 
 Requirements definition underway (this document), now updated for the QuadPlane VTOL decision (see [ADR 0002](docs/adr/0002-quadplane-vtol-airframe.md)). No parts purchased. Phase 7 (HIL/bench) needs answers to the "Decisions Only I Can Make First" items above before the remaining Phase-7-relevant categories (companion computer, power module, GNSS, LTE modem/SIM, independent safety link) can turn into actual candidate parts.
 
-**Flight controller: real candidates identified** (Holybro Pixhawk 6C/6X, see that section) -- both PX4-reference-tier supported, both clear the output/UART requirements with headroom. Not yet a final purchase decision: needs a current price quote and a physical-fit check against the Stork's actual payload bay once its STL is on hand.
+**Flight controller: real candidates identified across both procurement tiers** (Matek H743-WING for V1, Holybro Pixhawk 6C/6X for V2, see that section and the Procurement Strategy section above) -- all confirmed PX4-supported, all clear the output/UART requirements with headroom. Not yet a final purchase decision: needs a current price quote and a physical-fit check against the Stork's actual payload bay once its STL is on hand.
