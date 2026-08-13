@@ -31,7 +31,7 @@ Phase 7 (hardware-in-the-loop / bench testing) starts now that Phase 6 (failsafe
 
 Before any category below can turn into an actual part number, these need answers -- they're not engineering derivations, they're project-scope choices:
 
-- **Target endurance** (minutes of flight per battery, and roughly what split between hover and cruise time) -- drives battery capacity, which drives mass, which drives motor/prop sizing on *both* propulsion systems, which feeds back into power budget. Nothing downstream is stable until this is picked. VTOL adds a wrinkle plain fixed-wing didn't have: hover current draw (all 4 lift motors) is typically much higher than cruise current draw (1 pusher motor + control surfaces), so "endurance" really means two numbers -- how long can it hover, how long can it cruise -- not one.
+- ~~Target endurance~~ -- **resolved (2026-08-13): 20-30 minutes total mission time, endurance prioritized as the primary design goal.** Given VTOL's hover-vs-cruise current asymmetry (below), the practical strategy is minimizing time spent in hover (vertical takeoff/landing only, ~1-2 min combined) and spending the bulk of the 20-30 min in efficient cruise -- this is the standard QuadPlane endurance pattern, not something specific to this build, and it's *why* going VTOL doesn't have to mean accepting multicopter-grade endurance. See the Lift/Cruise propulsion and Battery sections below for how this shaped real component choices.
 - **Payload/avionics mass budget** -- companion computer + LTE modem + power module + wiring, as a fixed mass the airframe must carry beyond its own structure and propulsion. Rough estimate needed even before finalizing print settings/material choice, since it constrains whether the stock Stork design's payload bay is sufficient.
 - ~~Launch method~~ -- resolved by going VTOL: vertical takeoff/landing removes the hand-launch-vs-runway question and its airframe/motor-sizing implications entirely. Real, non-trivial simplification (see ADR 0002).
 - **Approximate budget** -- component categories below span an order of magnitude in cost depending on grade (hobby vs. semi-professional), and that mostly determines which specific parts are even worth researching. VTOL also means budgeting for *two* propulsion systems, not one.
@@ -91,6 +91,8 @@ All three clear the 8-output requirement with real headroom. The Matek is an FPV
 
 **What I need to know before selecting:** actual compute requirements once the C++ mission agent exists and its CPU profile is known (currently unbuilt, so this is provisional); USB port count needed (LTE modem at minimum, camera later if the vision extension in `project_prompt.txt` §24 happens).
 
+**Candidate (2026-08-13): Raspberry Pi 4 (2GB is likely enough for MAVSDK + our network stack, given PX4's own docs describe MAVSDK as intended for "relatively low bandwidth command/control," not high-throughput robotics work).** Deliberately not a Jetson-class board -- those exist for heavy onboard vision/AI compute, which is not in this project's current scope (`project_prompt.txt` §24's vision extension is explicitly future work), and their much higher power draw (Jetson Orin-class: ~10-30W) directly fights the endurance goal versus a Pi 4's ~3-7W under load. PX4 publishes an official Raspberry Pi companion-computer guide, so this is a well-trodden path, not a novel integration. Open question: the Pi 4 has no native M.2/mini-PCIe slot, so the LTE modem (see that section) needs either a USB-dongle-format modem or a USB-to-mPCIe carrier board -- not yet resolved.
+
 ### GNSS (Phase 7)
 
 **Why it exists:** PX4's primary position source, feeding the EKF and everything downstream (mission navigation, geofence enforcement -- see `tests/simulation/geofence_breach.md` for why this matters in practice, not just theory).
@@ -106,6 +108,8 @@ All three clear the 8-output requirement with real headroom. The Matek is an FPV
 **Reliability/failure modes:** `SAFETY.md`'s GPS_DEGRADED/GPS_LOST events are currently design-only (not yet tested, per `SIMULATION.md`'s Phase 6 findings -- blocked on SITL simulator backend, not hardware). Bench/HIL testing is exactly where this gap could finally get closed, since a real GNSS receiver can be physically shielded/moved indoors to induce a real degraded/lost fix, which SIH couldn't simulate.
 
 **What I need to know before selecting:** whether the chosen FC has a dedicated GNSS connector (most Pixhawk-standard boards do, simplifying this to "buy the matching module").
+
+**Candidate:** vendor's suggested **Matek M10Q** stays a reasonable choice -- pairs naturally with the Matek H743-WING (same manufacturer's connector/ecosystem conventions), standard M10-class GNSS module, no reason found to change it.
 
 ### Airspeed sensor (Phase 8)
 
@@ -123,6 +127,8 @@ All three clear the 8-output requirement with real headroom. The Matek is an FPV
 
 **What I need to know before selecting:** the airframe's expected speed envelope (depends on the launch-method and endurance decisions above).
 
+**Candidate (2026-08-13): Matek ASPD-4525** -- I2C digital airspeed sensor, 5mA draw (negligible against the power budget), explicitly compatible with Matek/Pixhawk/CUAV boards running PX4 or ArduPilot, includes the pitot tube and mounting cable in the kit. Good match, no open concerns.
+
 ### Power module (Phase 7)
 
 **Why it exists:** provides the FC with regulated power and voltage/current sensing, isolated from the noisier motor/ESC power path.
@@ -139,6 +145,8 @@ All three clear the 8-output requirement with real headroom. The Matek is an FPV
 
 **What I need to know before selecting:** total avionics current draw (companion computer + FC + GNSS + servos + LTE modem, worst case) -- can't size this until the companion computer and LTE modem are chosen.
 
+**Finding (2026-08-13): not a separate purchase for V1.** The Matek H743-WING (see Flight Controller above) has a built-in PDB with its own current sensor (90A continuous / 220A peak) and battery voltage sensing (3-8S / 8-36V input) -- this whole category is satisfied by the FC itself for the V1 build. Revisit only if V2's Pixhawk 6C/6X (which don't include an onboard PDB the same way) needs a separate power module added back in.
+
 ### LTE modem (Phase 7)
 
 **Why it exists:** the physical realization of the "4G/LTE" link `NETWORKING.md`'s whole tunnel design assumes.
@@ -152,6 +160,8 @@ All three clear the 8-output requirement with real headroom. The Matek is an FPV
 **Mass:** small for the modem itself; antenna placement matters more (see Cross-Cutting Concerns).
 
 **Reliability/failure modes:** this is deliberately *not* flight-critical (the entire point of `SAFETY.md`'s design principle and the Phase 4/5 tests already proving it) -- so its failure mode requirement is simply "fails safely," which is already satisfied by the software architecture regardless of which modem is chosen.
+
+**Candidate (2026-08-13): Quectel EC25** -- IoT/M2M-optimized LTE Cat 4 module, widely used, has power-saving modes for battery-constrained applications. Not fully resolved: the Raspberry Pi 4 companion computer choice above has no native M.2/mini-PCIe slot, so this needs either a USB-dongle-format LTE modem instead, or a USB-to-mPCIe carrier board for the EC25 specifically -- pick one before buying, don't assume the interface just works.
 
 **What I need to know before selecting:** the actual carrier and SIM plan for the test site (a "Decisions Only I Can Make First" item, not yet answered).
 
@@ -199,7 +209,9 @@ All three clear the 8-output requirement with real headroom. The Matek is an FPV
 
 **Requirements:** combined thrust with real margin (commonly 2:1 thrust-to-weight or better for stable hover authority, not just enough to barely lift off) over the airframe's all-up weight (1800-3100g per the vendor spec, actual value depends on final component choices); a 4-in-1 ESC (matching the vendor's suggestion) simplifies wiring versus 4 separate ESCs, at the cost of a single point of failure for all 4 lift motors -- worth weighing against `SAFETY.md`'s failure-mode thinking once VTOL-specific failsafe policy exists (currently a gap, see below).
 
-**What I need to know before selecting:** confirmed all-up weight once the airframe, avionics, and battery are closer to final (thrust-to-weight sizing can't be done from the vendor's weight *range* alone).
+**Candidate researched (2026-08-13) -- replacing the vendor's suggested T-Motor F90 1300KV.** The F90 is genuinely a poor fit for the "maximize endurance" goal: it's an FPV freestyle/racing motor (33.4x34.7mm stator, up to 53.6A/1302W) built for burst thrust-to-weight and agility, not grams-of-thrust-per-watt at hover throttle -- efficient hover motors pair a larger prop with a lower KV to move more air at lower RPM, which is a different design point entirely. **T-Motor MN3510 "Navigator Type," KV700 variant** is a purpose-built VTOL/mapping-drone lift motor: 2.2kg max thrust, 555W/25A peak -- meaningfully more efficient at real hover throttle (well under max) than a racing motor pushed to deliver the same thrust. 4 motors give up to 8.8kg combined max thrust against a realistic ~2.5-3kg AUW, comfortably clearing 2:1 T/W with room to spare, meaning hover throttle (and therefore current draw) stays in the efficient part of the curve rather than needing to run near max. Price/exact prop pairing not yet confirmed -- get T-Motor's own recommended prop for this KV before buying, don't guess.
+
+**What I need to know before selecting:** confirmed all-up weight once the airframe, avionics, and battery are closer to final (thrust-to-weight sizing can't be done from the vendor's weight *range* alone); still need a specific 4-in-1 ESC (or 4 individual ESCs) rated with margin over the MN3510's 25A peak per motor -- not yet selected.
 
 ### Cruise propulsion -- pusher motor + ESC + propeller (Phase 8)
 
@@ -207,7 +219,9 @@ All three clear the 8-output requirement with real headroom. The Matek is an FPV
 
 **Requirements:** enough thrust for the target cruise speed (50-70 km/h per the vendor spec) and climb-out margin during/after transition; propeller matched to the motor/voltage combination for cruise efficiency, not static thrust (different design point than the lift props, which are optimized for static/hover thrust).
 
-**What I need to know before selecting:** target cruise speed/climb margin (feeds from the endurance decision above) and battery voltage (shared with the lift system if using one battery for both, which is the vendor's implied configuration at 4S-6S).
+**Candidate:** vendor's suggested **BrotherHobby Avenger 2812 V5 910KV** (2200g max thrust @ 6S, 79g, explicitly tuned/marketed for efficient "cinematic" long-range flying rather than racing punch) is a reasonable starting candidate as-is -- unlike the lift motor, this one's vendor-suggested design intent (efficiency-oriented, not racing) already roughly matches the endurance goal. Not independently re-verified against alternatives the way the lift motor was; worth a second look if a genuinely more efficient cruise-specific option turns up, but not flagged as a problem the way the F90 was.
+
+**What I need to know before selecting:** target cruise speed/climb margin (feeds from the endurance decision above, now set at 20-30 min total mission with most of that in cruise) and battery voltage (shared with the lift system if using one battery for both, which is the vendor's implied configuration at 4S-6S).
 
 ### Battery (Phase 8)
 
@@ -215,7 +229,11 @@ All three clear the 8-output requirement with real headroom. The Matek is an FPV
 
 **Requirements:** capacity sized to the target hover time (higher current draw) and cruise time (lower current draw) as two separate legs of one mission profile, not a single "endurance" number; C-rating with margin over the *lift system's* peak draw specifically, since 4 simultaneous motors at takeoff/landing is almost certainly the highest instantaneous current draw the battery ever sees, higher than cruise; mass traded directly against endurance -- there's no way around this being an iteration, not a lookup.
 
-**What I need to know before selecting:** target endurance split between hover and cruise (a "Decisions Only I Can Make First" item, now a two-part question because of VTOL).
+**Chemistry candidate researched (2026-08-13): Li-ion over LiPo, given the endurance priority.** High-drain 21700 Li-ion cells (e.g. Molicel P42A/P45B, ~45A continuous each, 4200-4500mAh, 3.6V nominal) deliver roughly 240 Wh/kg vs. a typical LiPo's ~150 Wh/kg -- a real, large weight-for-energy advantage directly relevant to "stay in the air as long as possible." The tradeoff is peak discharge current: Li-ion sags harder under heavy load than LiPo, which matters specifically during the lift system's hover current spike, not during cruise.
+
+**Rough sizing math (needs real validation once AUW is final, not a purchase spec yet):** 4x MN3510 lift motors at up to 25A peak each = 100A worst-case system peak. At 45A continuous per Molicel cell, that needs at least 3 parallel cells for margin, 4 parallel for real headroom -- a **6S4P pack** (24 cells, ~16,800mAh, ~180A max continuous) covers this comfortably. Estimated mass: ~24 cells x ~70g + pack overhead (BMS/wiring/case) =~ 1.8kg -- this lands at or above the vendor's own upper AUW figure (3100g) once airframe, motors, and avionics are added, which is a real red flag worth resolving before buying, not glossing over. **Fallback if the Li-ion pack doesn't fit the weight budget:** a 6S LiPo pack is heavier per Wh but has a much easier time meeting the hover current spike with fewer cells/simpler BMS, and is the more conventional, lower-risk RC choice -- keep as the practical fallback if Li-ion sizing doesn't close.
+
+**What I need to know before selecting:** confirmed AUW once the airframe (with real V1 avionics) is weighed, to check whether the 6S4P Li-ion estimate above actually fits or needs to shrink (fewer parallel cells, accepting less hover margin) or fall back to LiPo.
 
 ### Servos (Phase 8)
 
@@ -224,6 +242,8 @@ All three clear the 8-output requirement with real headroom. The Matek is an FPV
 **Requirements:** 4 servos per the vendor spec (2 ailerons via Y-cable counted as one PX4 control channel, elevator, rudder -- matches `sihsim_standard_vtol`'s `CA_SV_CS_COUNT=3` control-surface-type count); torque sufficient for control-surface aerodynamic loads at cruise airspeed (not just static bench torque); voltage compatible with whatever the power module's servo rail supplies.
 
 **What I need to know before selecting:** control-surface sizing, which comes from the airframe (already fixed by the Stork design, so this becomes a more straightforward lookup than it would be for a from-scratch airframe).
+
+**Note (2026-08-13): the cheap, ubiquitous MG996R (55g, 9.4-11kg/cm) is likely the wrong choice despite being the default budget answer for RC servos.** It's fine for flaps, but real-world builder reports specifically call it out as too slow for primary control surfaces (ailerons/elevator/rudder) on planes this size -- a control surface that responds sluggishly is a flight-safety concern, not just a performance nicety, so this isn't a place to default to the cheapest option. No specific replacement model selected yet -- needs a lightweight (~15-20g class) metal-gear *digital* servo sized for this wingspan, not just "anything with enough torque."
 
 ## Cross-Cutting Concerns
 
@@ -240,6 +260,10 @@ These aren't separate components -- they're constraints that any component selec
 
 ## Status
 
-Requirements definition underway (this document), now updated for the QuadPlane VTOL decision (see [ADR 0002](docs/adr/0002-quadplane-vtol-airframe.md)). No parts purchased. Phase 7 (HIL/bench) needs answers to the "Decisions Only I Can Make First" items above before the remaining Phase-7-relevant categories (companion computer, power module, GNSS, LTE modem/SIM, independent safety link) can turn into actual candidate parts.
+Requirements definition underway (this document), now updated for the QuadPlane VTOL decision (see [ADR 0002](docs/adr/0002-quadplane-vtol-airframe.md)) and the endurance-first procurement pass (2026-08-13). No parts purchased.
 
-**Flight controller: real candidates identified across both procurement tiers** (Matek H743-WING for V1, Holybro Pixhawk 6C/6X for V2, see that section and the Procurement Strategy section above) -- all confirmed PX4-supported, all clear the output/UART requirements with headroom. Not yet a final purchase decision: needs a current price quote and a physical-fit check against the Stork's actual payload bay once its STL is on hand.
+**Target endurance resolved:** 20-30 min total mission, endurance prioritized as the explicit design goal -- see the (formerly open) "Decisions Only I Can Make First" item above.
+
+**Real candidates now identified for most Phase 7/8 categories**, not just the flight controller: FC (Matek H743-WING V1 / Pixhawk 6C or 6X V2), lift motors (T-Motor MN3510 KV700, replacing the vendor's inefficient F90 suggestion), cruise motor (vendor's Avenger 2812, kept as-is), battery chemistry and rough cell count (6S4P Li-ion using Molicel P42A/P45B, with a LiPo fallback if the weight math doesn't close), companion computer (Raspberry Pi 4), GNSS (vendor's Matek M10Q, kept), airspeed sensor (Matek ASPD-4525), LTE modem (Quectel EC25), and power module (not needed separately for V1 -- built into the Matek FC). See `parts_list.txt` at the repo root for the consolidated shopping list.
+
+**Still genuinely open, not glossed over:** exact ESC selection (needs to be matched to the MN3510's current draw, not yet chosen), servo model (MG996R identified as likely too slow for primary control surfaces despite being the default cheap choice -- no replacement picked yet), whether the 6S4P Li-ion battery estimate actually fits the airframe's weight budget once real masses are known, and the LTE modem's physical interface to the Pi 4 (no native M.2/mPCIe slot -- needs a USB modem or a carrier board). Remaining "Decisions Only I Can Make First" items (payload mass budget, approximate total budget, test site) still block SIM/carrier selection and the final servo/ESC pass.
