@@ -136,6 +136,29 @@ This is a real, positive result, but a narrow one -- one uneventful mission, def
 
 Separately, this session also surfaced a PX4/MAVSDK networking gotcha unrelated to the VTOL switch itself -- see the new bullet under Phase 4 Findings above (one-time UDP partner-learning race that can wedge a connection until both PX4 and the backend are restarted together).
 
+## Mission-Tuning Stress Test (2026-08-13)
+
+Deliberately flew missions violating `app/config.py`'s `MAX_TURN_ANGLE_DEG` (70) and `MIN_WAYPOINT_SEPARATION_M` (150) -- both derived from Phase 3 fixed-wing findings -- to see whether the same failure modes reproduce on `sihsim_standard_vtol`. Two approaches were tried:
+
+- **Direct MAVSDK bypass** (uploading missions to PX4 without going through the backend's own validation, matching `test-inflight-geofence-breach.sh`'s pattern) worked for isolated single-flight tests, but was unreliable for a rapid multi-scenario sweep: a second independent `mavsdk_server` process cannot discover PX4 at all while the backend's own connection is already the established partner (PX4's GCS-style MAVLink instance only tracks one learned peer, and `mavsdk_server` doesn't open its own gRPC port until *after* UDP discovery succeeds -- so a second client just hangs indefinitely, silently, with no error). Do not run a second MAVSDK client against the same PX4 instance while the backend is connected.
+- **What actually worked**: relaunching the backend with `MAX_TURN_ANGLE_DEG`/`MIN_WAYPOINT_SEPARATION_M` relaxed via their existing env-var overrides (`simulation/network/launch-ground-stress-test.sh`), then driving missions through the real `/api/missions` + `/api/missions/current/start` endpoints via plain `curl` to the backend's `ground-net` IP directly (`10.201.0.2:8000` -- no `sudo`/`ip netns exec` needed, since that address is reachable from the default WSL namespace without entering the namespace). This exercises the actual code path a real operator would use, just with relaxed limits, rather than bypassing the backend entirely.
+
+**Results** (all against `sihsim_standard_vtol`, 30m altitude, 3 flights each starting from a clean disarmed-on-ground state):
+
+| Scenario | Geometry | Speed | Result |
+|---|---|---|---|
+| S2 | 60m/60m legs (well under 150m floor), 45deg turn | 15 m/s (trim) | Completed cleanly via own landing item |
+| S3 | 60m/60m legs, 100deg turn | 15 m/s | Completed cleanly, confirmed with full telemetry trace (smooth climb, stable ~28-30m altitude hold, clean descent) |
+| S4 | 300m/300m legs, 150deg near-reversal turn | 15 m/s | Completed cleanly in ~50s, no warnings |
+| S5 | 250m/250m legs, 40deg turn | 25 m/s (vs. 15 m/s `FW_AIRSPD_TRIM`) | Completed, but took ~200s -- roughly 4x longer than S4's comparable-distance ~50s |
+| S1 | 250m/280m legs, 89deg turn (the exact angle that broke fixed-wing in Phase 3) | 15 m/s | Completed via own landing item, no errors -- but real-time data is unreliable here specifically (see caveat below) |
+
+**Headline finding:** geometry that was rejected outright by the app's own limits, and that specifically destabilized the fixed-wing controller in Phase 3 (sharp turns, tight waypoint spacing), flew cleanly on this VTOL with zero failures across S2-S4. The likely explanation is the airframe's very different mass/inertia in cruise phase (`SIH_MASS` 0.2kg vs. whatever the fixed-wing model used) rather than anything about the turn-angle logic itself -- PX4's navigation controller has much less momentum to fight through a sharp turn. **This is a narrow result, not a green light to loosen the production config**: only 5 scenarios, single uneventful runs, no wind/failure combination, and none of it touches hover or transition phases (all the geometry stress was in cruise). Worth a real re-tuning pass before touching `MAX_TURN_ANGLE_DEG`/`MIN_WAYPOINT_SEPARATION_M` for real, not a config change based on this alone.
+
+**The one real weak point found: overspeed cruise (S5).** Matches the exact mechanism from the original Phase 3 finding (commanding speed above `FW_AIRSPD_TRIM` makes the altitude controller trade altitude for airspeed) -- on this VTOL it doesn't cause outright failure the way sharp turns didn't, but it does cost a large, real time penalty (4x). `DEFAULT_CRUISE_SPEED_M_S` should stay matched to trim speed for this airframe too, not just for the old fixed-wing one.
+
+**Caveat on S1's timing:** mid-test, checking on this result took an extended, irregular real-world gap (working through the MAVSDK-bypass connection problem above), and PX4 SITL runs in lockstep at 1x real speed -- so I can't rule out that S1 struggled or circled for a while before eventually completing during that gap. The clean, unambiguous timing data for S4/S5 above comes from a corrected polling method (tracking the log's line offset at mission start, so only genuinely new completion markers count) built specifically because the S1 read was unreliable. If S1's case matters later, re-run it with that same method.
+
 ## Status
 
 **Milestone 1 is complete.** SITL, backend, frontend, mission upload/validation/execution, live telemetry, emergency RTL, and the network-outage/failsafe behavior are all working end-to-end and verified against live PX4 SITL.
