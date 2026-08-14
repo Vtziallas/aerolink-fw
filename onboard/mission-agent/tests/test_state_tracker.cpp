@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <atomic>
 #include <thread>
 #include <vector>
 #include "../src/state_tracker.h"
@@ -41,31 +42,30 @@ TEST_CASE("StateTracker setters update the snapshot", "[state_tracker]") {
 
 TEST_CASE("StateTracker is safe under concurrent reads and writes", "[state_tracker]") {
     StateTracker tracker;
+    std::atomic<int> violations{0};
     std::vector<std::thread> threads;
 
     for (int i = 0; i < 8; ++i) {
-        threads.emplace_back([&tracker, i]() {
+        threads.emplace_back([&tracker, &violations, i]() {
             for (int j = 0; j < 1000; ++j) {
                 tracker.set_position(static_cast<double>(i), static_cast<double>(j), 0.0f);
                 auto snap = tracker.snapshot();
                 // set_position holds the lock across both fields, so any
-                // snapshot -- from this thread or another -- must see a
-                // (lat, lon) pair some single call actually wrote together,
-                // never a torn mix of two different calls' values. lat is
-                // always a thread index (0-7); lon is always that thread's
-                // current loop counter (0-999). A torn read would produce
-                // a value outside these ranges.
-                REQUIRE(snap.latitude_deg >= 0.0);
-                REQUIRE(snap.latitude_deg < 8.0);
-                REQUIRE(snap.longitude_deg >= 0.0);
-                REQUIRE(snap.longitude_deg < 1000.0);
+                // snapshot must see a (lat, lon) pair some single call
+                // actually wrote together, never a torn mix. A torn read
+                // would produce a value outside these ranges.
+                bool ok = snap.latitude_deg >= 0.0 && snap.latitude_deg < 8.0 &&
+                          snap.longitude_deg >= 0.0 && snap.longitude_deg < 1000.0;
+                if (!ok) violations.fetch_add(1);
             }
         });
     }
     for (auto& t : threads) t.join();
 
-    // After every thread has finished, the tracker must still hold one
-    // fully consistent (lat, lon) pair, not a corrupted mid-write value.
+    // Assert only on the main thread, after all workers have finished --
+    // Catch2's REQUIRE is not documented safe to call from worker threads.
+    REQUIRE(violations.load() == 0);
+
     auto final_snap = tracker.snapshot();
     REQUIRE(final_snap.latitude_deg >= 0.0);
     REQUIRE(final_snap.latitude_deg < 8.0);
