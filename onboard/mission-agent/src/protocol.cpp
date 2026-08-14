@@ -33,37 +33,40 @@ CommandType command_type_from_string(const std::string& s) {
 }
 
 Command parse_command(const std::string& json_line) {
-    json j;
     try {
-        j = json::parse(json_line);
-    } catch (const json::parse_error& e) {
-        throw std::invalid_argument(std::string("malformed JSON: ") + e.what());
-    }
+        json j = json::parse(json_line);
 
-    Command cmd;
-    cmd.command_id = j.at("command_id").get<std::string>();
-    cmd.aircraft_id = j.at("aircraft_id").get<std::string>();
-    cmd.timestamp = j.at("timestamp").get<std::string>();
-    cmd.command_type = command_type_from_string(j.at("command_type").get<std::string>());
-    cmd.mission_version = j.at("mission_version").get<int>();
+        Command cmd;
+        cmd.command_id = j.at("command_id").get<std::string>();
+        cmd.aircraft_id = j.at("aircraft_id").get<std::string>();
+        cmd.timestamp = j.at("timestamp").get<std::string>();
+        cmd.command_type = command_type_from_string(j.at("command_type").get<std::string>());
+        cmd.mission_version = j.at("mission_version").get<int>();
 
-    if (j.contains("parameters") && j["parameters"].contains("waypoints")) {
-        for (const auto& wp_json : j["parameters"]["waypoints"]) {
-            Waypoint wp;
-            wp.latitude_deg = wp_json.at("latitude_deg").get<double>();
-            wp.longitude_deg = wp_json.at("longitude_deg").get<double>();
-            wp.altitude_m = wp_json.at("altitude_m").get<float>();
-            if (wp_json.contains("speed_m_s") && !wp_json["speed_m_s"].is_null()) {
-                wp.speed_m_s = wp_json["speed_m_s"].get<float>();
+        if (j.contains("parameters") && j["parameters"].contains("waypoints")) {
+            for (const auto& wp_json : j["parameters"]["waypoints"]) {
+                Waypoint wp;
+                wp.latitude_deg = wp_json.at("latitude_deg").get<double>();
+                wp.longitude_deg = wp_json.at("longitude_deg").get<double>();
+                wp.altitude_m = wp_json.at("altitude_m").get<float>();
+                if (wp_json.contains("speed_m_s") && !wp_json["speed_m_s"].is_null()) {
+                    wp.speed_m_s = wp_json["speed_m_s"].get<float>();
+                }
+                if (wp_json.contains("loiter_duration_s") && !wp_json["loiter_duration_s"].is_null()) {
+                    wp.loiter_duration_s = wp_json["loiter_duration_s"].get<float>();
+                }
+                cmd.waypoints.push_back(wp);
             }
-            if (wp_json.contains("loiter_duration_s") && !wp_json["loiter_duration_s"].is_null()) {
-                wp.loiter_duration_s = wp_json["loiter_duration_s"].get<float>();
-            }
-            cmd.waypoints.push_back(wp);
         }
-    }
 
-    return cmd;
+        return cmd;
+    } catch (const std::invalid_argument& e) {
+        // Re-throw invalid_argument from command_type_from_string as-is
+        throw;
+    } catch (const json::exception& e) {
+        // Catch all nlohmann::json exceptions (parse_error, out_of_range, type_error, etc.)
+        throw std::invalid_argument(std::string("invalid command JSON: ") + e.what());
+    }
 }
 
 std::string serialize_ack(const Ack& ack) {

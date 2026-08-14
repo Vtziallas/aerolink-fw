@@ -75,3 +75,26 @@ TEST_CASE("serialize_ack includes reason on REJECTED", "[protocol]") {
     REQUIRE(parsed["status"] == "REJECTED");
     REQUIRE(parsed["reason"] == "outside geofence");
 }
+
+TEST_CASE("parse_command throws on missing required field", "[protocol]") {
+    std::string line = R"({
+        "aircraft_id": "aerolink-1",
+        "timestamp": "2026-08-14T10:00:00Z",
+        "command_type": "START_MISSION",
+        "parameters": {},
+        "mission_version": 1
+    })";
+    REQUIRE_THROWS_AS(parse_command(line), std::invalid_argument);
+}
+
+TEST_CASE("parse_command throws on wrong-type field", "[protocol]") {
+    std::string line = R"({
+        "command_id": "abc-123",
+        "aircraft_id": "aerolink-1",
+        "timestamp": "2026-08-14T10:00:00Z",
+        "command_type": "START_MISSION",
+        "parameters": {},
+        "mission_version": "not-a-number"
+    })";
+    REQUIRE_THROWS_AS(parse_command(line), std::invalid_argument);
+}
