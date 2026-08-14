@@ -6,8 +6,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
-add_executable(mission_agent_tests test_smoke.cpp)
-target_link_libraries(mission_agent_tests PRIVATE Catch2::Catch2WithMain)
+add_executable(mission_agent_tests test_smoke.cpp test_protocol.cpp ../src/protocol.cpp)
+target_link_libraries(mission_agent_tests PRIVATE Catch2::Catch2WithMain nlohmann_json::nlohmann_json)
 
 include(CTest)
 include(Catch)

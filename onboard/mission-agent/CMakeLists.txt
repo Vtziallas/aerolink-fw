@@ -14,7 +14,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-add_executable(mission_agent src/main.cpp)
+add_executable(mission_agent src/main.cpp src/protocol.cpp)
 target_link_libraries(mission_agent PRIVATE nlohmann_json::nlohmann_json)
 
 enable_testing()
