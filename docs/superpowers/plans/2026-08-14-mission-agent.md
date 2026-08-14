@@ -505,15 +505,31 @@ TEST_CASE("StateTracker is safe under concurrent reads and writes", "[state_trac
     for (int i = 0; i < 8; ++i) {
         threads.emplace_back([&tracker, i]() {
             for (int j = 0; j < 1000; ++j) {
-                tracker.set_position(i, j, 0.0f);
+                tracker.set_position(static_cast<double>(i), static_cast<double>(j), 0.0f);
                 auto snap = tracker.snapshot();
-                (void)snap;
+                // set_position holds the lock across both fields, so any
+                // snapshot -- from this thread or another -- must see a
+                // (lat, lon) pair some single call actually wrote together,
+                // never a torn mix of two different calls' values. lat is
+                // always a thread index (0-7); lon is always that thread's
+                // current loop counter (0-999). A torn read would produce
+                // a value outside these ranges.
+                REQUIRE(snap.latitude_deg >= 0.0);
+                REQUIRE(snap.latitude_deg < 8.0);
+                REQUIRE(snap.longitude_deg >= 0.0);
+                REQUIRE(snap.longitude_deg < 1000.0);
             }
         });
     }
     for (auto& t : threads) t.join();
-    // No crash / no TSan report == pass. Nothing further to assert.
-    REQUIRE(true);
+
+    // After every thread has finished, the tracker must still hold one
+    // fully consistent (lat, lon) pair, not a corrupted mid-write value.
+    auto final_snap = tracker.snapshot();
+    REQUIRE(final_snap.latitude_deg >= 0.0);
+    REQUIRE(final_snap.latitude_deg < 8.0);
+    REQUIRE(final_snap.longitude_deg >= 0.0);
+    REQUIRE(final_snap.longitude_deg < 1000.0);
 }
 ```
 
