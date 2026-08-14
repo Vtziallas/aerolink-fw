@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(MAVSDK REQUIRED)
+find_package(Threads REQUIRED)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -14,8 +15,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-add_executable(mission_agent src/main.cpp src/protocol.cpp)
-target_link_libraries(mission_agent PRIVATE nlohmann_json::nlohmann_json)
+add_executable(mission_agent src/main.cpp src/protocol.cpp src/state_tracker.cpp)
+target_link_libraries(mission_agent PRIVATE nlohmann_json::nlohmann_json Threads::Threads)
 
 enable_testing()
 add_subdirectory(tests)
