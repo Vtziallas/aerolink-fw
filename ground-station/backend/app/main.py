@@ -23,7 +23,8 @@ from app.vehicle import VehicleConnection
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-VEHICLE_SYSTEM_ADDRESS = os.environ.get("VEHICLE_SYSTEM_ADDRESS", "udpin://0.0.0.0:14540")
+MISSION_AGENT_HOST = os.environ.get("MISSION_AGENT_HOST", "127.0.0.1")
+MISSION_AGENT_PORT = int(os.environ.get("MISSION_AGENT_PORT", "5760"))
 
 # The frontend dev server runs on a different origin (port), so the browser
 # requires CORS to allow the REST calls (WebSocket connections aren't
@@ -37,7 +38,7 @@ ALLOWED_ORIGINS = os.environ.get(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    vehicle = VehicleConnection(VEHICLE_SYSTEM_ADDRESS)
+    vehicle = VehicleConnection(MISSION_AGENT_HOST, MISSION_AGENT_PORT)
     app.state.vehicle = vehicle
     connect_task = asyncio.create_task(vehicle.connect())
     yield
@@ -60,7 +61,7 @@ async def status():
     vehicle: VehicleConnection = app.state.vehicle
     return {
         "vehicle_connected": vehicle.state.is_connected,
-        "system_address": VEHICLE_SYSTEM_ADDRESS,
+        "mission_agent_address": f"{MISSION_AGENT_HOST}:{MISSION_AGENT_PORT}",
     }
 
 
