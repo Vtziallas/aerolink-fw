@@ -159,10 +159,59 @@ Deliberately flew missions violating `app/config.py`'s `MAX_TURN_ANGLE_DEG` (70)
 
 **Caveat on S1's timing:** mid-test, checking on this result took an extended, irregular real-world gap (working through the MAVSDK-bypass connection problem above), and PX4 SITL runs in lockstep at 1x real speed -- so I can't rule out that S1 struggled or circled for a while before eventually completing during that gap. The clean, unambiguous timing data for S4/S5 above comes from a corrected polling method (tracking the log's line offset at mission start, so only genuinely new completion markers count) built specifically because the S1 read was unreliable. If S1's case matters later, re-run it with that same method.
 
+## Mission Agent Integration (2026-08-18)
+
+The C++ `mission_agent` (`onboard/mission-agent/`, see
+`docs/architecture/mission-agent-design.md`) is now real, running code, not
+just a box in `ARCHITECTURE.md`'s diagram. Built via 11 TDD tasks (subagent-driven,
+each with an independent spec+quality review), then verified end-to-end: full
+mission upload/start/execute/land through the real chain -- backend ->
+WireGuard tunnel -> Mission Agent (TCP/JSON) -> MAVSDK (local link) -> PX4 --
+confirmed via three independent log sources agreeing on the outcome, not one
+process's self-report taken at face value. Full test record:
+[`tests/simulation/mission_agent_integration.md`](tests/simulation/mission_agent_integration.md).
+
+The backend no longer holds any MAVSDK connection at all -- `VehicleConnection`
+is now a plain TCP/JSON client of the Mission Agent (`app/mission_agent_client.py`).
+This closes the gap this document flagged back in Phase 2/3: the companion
+computer's role (command validation, geofence enforcement, the MAVSDK relay to
+PX4) was always meant to live in a separate onboard process, not inside the
+ground-station backend -- that's now actually true, not just documented as the
+target architecture.
+
+**Two real findings from this integration pass, not anticipated in the
+design**, both now fixed and worth remembering for future work on this
+machine specifically:
+- A plain `git merge --ff-only` silently corrupted three shell scripts with
+  CRLF line endings on this Windows/WSL checkout (autocrlf on checkout, not a
+  content bug -- the committed blobs were correct LF). Fixed with a new
+  `.gitattributes` (`*.sh`/`*.py` forced to `eol=lf`) so it can't recur.
+- `mission_agent`'s stdout is block-buffered when redirected to a log file,
+  same class of issue as the Python `print()` buffering problem found earlier
+  in this project's VTOL debugging (see above) -- its "connected"/"serving"
+  log lines can lag real readiness by tens of seconds. Confirmed the process
+  was actually functional well before the log caught up via
+  `/proc/<pid>/net/tcp` rather than waiting on the log alone.
+
+**What this does NOT yet close**, to avoid overclaiming: Telemetry Agent and
+Network Manager (the other two `onboard/` services) are still unbuilt --
+the Mission Agent's own `TelemetryPublisher` is a deliberately minimal
+stand-in (see the design doc), not those services' real design (rate-classing,
+buffering under bad links). The command-replay-protection gap (stale/duplicate
+`command_id` rejection) noted in `NETWORKING.md` is still open -- this
+integration pass used the same simple JSON protocol the design doc specified,
+which explicitly deferred that. And the "distinct onboard companion process"
+now genuinely exists (closing a structural gap this document flagged as
+needing infrastructure not yet built), but a companion-service-restart fault
+test (crash the Mission Agent specifically, confirm PX4/backend behavior,
+distinct from a plain backend restart) has not actually been run yet -- worth
+doing as real Phase 5-style fault injection now that the infrastructure to do
+it finally exists, not assumed safe by analogy to the backend-restart test.
+
 ## Status
 
 **Milestone 1 is complete.** SITL, backend, frontend, mission upload/validation/execution, live telemetry, emergency RTL, and the network-outage/failsafe behavior are all working end-to-end and verified against live PX4 SITL.
 
-**Phase 4 (network split) and Phase 5 (fault injection) are complete**, aside from items that need infrastructure not yet built (command auth for stale/duplicate command rejection; a distinct onboard companion process for a companion-service-restart test distinct from a plain backend restart). Backend and PX4 communicate over a real WireGuard tunnel between two isolated Linux network namespaces (`NETWORKING.md`'s Phase 4 Implementation section). The aircraft was flown, or attempted to be recovered, under 250ms latency, 15% packet loss, and a full mid-flight link interruption + reconnection -- all passing, all documented in `tests/simulation/`.
+**Phase 4 (network split) and Phase 5 (fault injection) are complete**, aside from items that need infrastructure not yet built (command auth for stale/duplicate command rejection -- still open). The companion-service-restart test that needed a distinct onboard process now has that infrastructure (see "Mission Agent Integration" below), but the actual fault-injection test hasn't been run yet. Backend and PX4 communicate over a real WireGuard tunnel between two isolated Linux network namespaces (`NETWORKING.md`'s Phase 4 Implementation section). The aircraft was flown, or attempted to be recovered, under 250ms latency, 15% packet loss, and a full mid-flight link interruption + reconnection -- all passing, all documented in `tests/simulation/`.
 
 **Phase 6 (failsafe testing) is complete, aside from GPS degradation/loss**, which is blocked on simulator backend choice (needs Gazebo/mavlink-simulator, not SIH) and tracked honestly as not attempted rather than assumed to work. Battery failsafe and geofence breach (both pre-flight rejection and genuine in-flight recovery) are fully verified.
