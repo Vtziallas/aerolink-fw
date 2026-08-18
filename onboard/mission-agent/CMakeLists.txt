@@ -15,7 +15,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-add_executable(mission_agent src/main.cpp src/protocol.cpp src/state_tracker.cpp src/command_validator.cpp src/mavlink_connection.cpp)
+add_executable(mission_agent src/main.cpp src/protocol.cpp src/state_tracker.cpp src/command_validator.cpp src/mavlink_connection.cpp src/agent_server.cpp)
 target_link_libraries(mission_agent PRIVATE nlohmann_json::nlohmann_json Threads::Threads MAVSDK::mavsdk)
 
 add_executable(manual_mavlink_test tests/manual_mavlink_test.cpp src/protocol.cpp src/state_tracker.cpp src/mavlink_connection.cpp)

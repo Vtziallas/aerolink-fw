@@ -8,8 +8,8 @@ FetchContent_MakeAvailable(Catch2)
 
 find_package(Threads REQUIRED)
 
-add_executable(mission_agent_tests test_smoke.cpp test_protocol.cpp test_state_tracker.cpp test_command_validator.cpp ../src/protocol.cpp ../src/state_tracker.cpp ../src/command_validator.cpp)
-target_link_libraries(mission_agent_tests PRIVATE Catch2::Catch2WithMain nlohmann_json::nlohmann_json Threads::Threads)
+add_executable(mission_agent_tests test_smoke.cpp test_protocol.cpp test_state_tracker.cpp test_command_validator.cpp test_agent_server.cpp ../src/protocol.cpp ../src/state_tracker.cpp ../src/command_validator.cpp ../src/agent_server.cpp)
+target_link_libraries(mission_agent_tests PRIVATE Catch2::Catch2WithMain nlohmann_json::nlohmann_json Threads::Threads MAVSDK::mavsdk)
 
 include(CTest)
 include(Catch)
