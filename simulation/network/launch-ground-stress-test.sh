@@ -18,7 +18,7 @@ BACKEND_DIR="/mnt/c/Users/youruser/git/uav_project/ground-station/backend"
 LOG_FILE="/tmp/backend_ground_net.log"
 
 exec ip netns exec ground-net sudo -u "$REAL_USER" env \
-  VEHICLE_SYSTEM_ADDRESS="udpout://10.99.0.2:18570" \
+  MISSION_AGENT_HOST="10.99.0.2" MISSION_AGENT_PORT="5760" \
   MAX_TURN_ANGLE_DEG="179" \
   MIN_WAYPOINT_SEPARATION_M="1" \
   bash -c "cd '$BACKEND_DIR' && exec /home/$REAL_USER/venvs/aerolink-backend/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000" \
