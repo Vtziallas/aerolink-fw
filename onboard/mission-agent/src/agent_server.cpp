@@ -72,6 +72,7 @@ void AgentServer::send_line(const std::string& line) {
 
 void AgentServer::send_ack(int client_fd, const Ack& ack) {
     std::string line = serialize_ack(ack);
+    std::lock_guard<std::mutex> lock(client_mutex_);
     write(client_fd, line.c_str(), line.size());
 }
 
@@ -105,7 +106,6 @@ void AgentServer::handle_connection(int client_fd) {
                 continue;
             }
             send_ack(client_fd, Ack{command.command_id, AckStatus::Validated, ""});
-            send_ack(client_fd, Ack{command.command_id, AckStatus::Accepted, ""});
 
             MavlinkResult result{true, ""};
             switch (command.command_type) {
@@ -124,6 +124,7 @@ void AgentServer::handle_connection(int client_fd) {
                 send_ack(client_fd, Ack{command.command_id, AckStatus::Rejected, result.error_message});
                 continue;
             }
+            send_ack(client_fd, Ack{command.command_id, AckStatus::Accepted, ""});
             if (command.command_type == CommandType::StartMission || command.command_type == CommandType::ReturnToLaunch) {
                 send_ack(client_fd, Ack{command.command_id, AckStatus::Px4ActionStarted, ""});
             }

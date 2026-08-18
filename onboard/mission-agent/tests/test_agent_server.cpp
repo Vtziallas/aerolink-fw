@@ -116,6 +116,36 @@ TEST_CASE("AgentServer rejects START_MISSION with no mission uploaded and stops 
     server_thread.join();
 }
 
+TEST_CASE("AgentServer does not send ACCEPTED when the MAVSDK call fails", "[agent_server]") {
+    CommandValidator validator(test_geofence());
+    FakeMavlinkConnection mavlink;
+    mavlink.start_result = MavlinkResult{false, "px4 rejected arm"};
+    StateTracker tracker;
+    tracker.set_mission_uploaded(true);
+
+    AgentServer server(15554, validator, mavlink, tracker);
+    std::thread server_thread([&server]() { server.run(); });
+
+    int client_fd = connect_with_retry(15554);
+    std::string command = R"({"command_id":"c3","aircraft_id":"a1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
+    command += "\n";
+    write(client_fd, command.c_str(), command.size());
+
+    std::string first = read_line(client_fd);
+    std::string second = read_line(client_fd);
+    std::string third = read_line(client_fd);
+
+    REQUIRE(first.find("RECEIVED") != std::string::npos);
+    REQUIRE(second.find("VALIDATED") != std::string::npos);
+    REQUIRE(third.find("REJECTED") != std::string::npos);
+    REQUIRE(third.find("px4 rejected arm") != std::string::npos);
+    REQUIRE(third.find("ACCEPTED") == std::string::npos);
+
+    close(client_fd);
+    server.stop();
+    server_thread.join();
+}
+
 TEST_CASE("AgentServer send_line reaches a connected client via the telemetry sink interface", "[agent_server]") {
     CommandValidator validator(test_geofence());
     FakeMavlinkConnection mavlink;
