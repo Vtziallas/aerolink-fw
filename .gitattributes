@@ -1,0 +1,8 @@
+# Force LF line endings for files that get executed as scripts, regardless
+# of the local git core.autocrlf setting -- CRLF corruption on Windows
+# checkouts silently breaks bash's shebang/blank-line parsing (hit for real
+# during this project's Mission Agent integration testing: a plain
+# `git merge --ff-only` reintroduced CRLF into simulation/network/*.sh even
+# though the committed blobs were already correct LF).
+*.sh text eol=lf
+*.py text eol=lf
