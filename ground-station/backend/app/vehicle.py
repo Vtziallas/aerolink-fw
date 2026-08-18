@@ -71,6 +71,7 @@ class VehicleConnection:
 
     async def disconnect(self) -> None:
         self.state.is_connected = False
+        await self._client.disconnect()
 
     def subscribe(self) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=1)

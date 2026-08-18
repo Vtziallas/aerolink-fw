@@ -8,24 +8,6 @@ import pytest
 from app.mission_agent_client import MissionAgentClient
 
 
-async def _run_fake_agent(port: int, responses: list[dict], received: list[dict]):
-    """Accepts one connection, echoes back `responses` (one per line read),
-    ignoring the actual command content except recording it."""
-
-    async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        line = await reader.readline()
-        received.append(json.loads(line))
-        for resp in responses:
-            writer.write((json.dumps(resp) + "\n").encode())
-            await writer.drain()
-        await asyncio.sleep(0.05)
-        writer.close()
-
-    server = await asyncio.start_server(handle, "127.0.0.1", port)
-    async with server:
-        await server.serve_forever()
-
-
 @pytest.mark.asyncio
 async def test_send_command_returns_full_ack_chain():
     port = 15761
@@ -101,3 +83,36 @@ async def test_telemetry_callback_receives_non_ack_lines():
 
         assert len(telemetry_received) == 1
         assert telemetry_received[0]["latitude_deg"] == 47.4
+
+
+@pytest.mark.asyncio
+async def test_send_command_raises_when_connection_drops_mid_command():
+    """Regression test for Task 9 review Finding 1/2: if the Mission Agent
+    connection drops while a command is in flight, send_command must raise
+    a clear error (and clean up its pending-ack bookkeeping) instead of
+    hanging forever."""
+    port = 15764
+
+    async def handle(reader, writer):
+        # Read the in-flight command, then simulate the Mission Agent
+        # process dying (or the TCP link dropping) without ever acking --
+        # never write a response, just close the connection.
+        await reader.readline()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(handle, "127.0.0.1", port)
+    async with server:
+        asyncio.create_task(server.serve_forever())
+
+        client = MissionAgentClient("127.0.0.1", port)
+        await client.connect()
+
+        # Bounded wait so a regression (a hang) fails this test loudly
+        # instead of hanging the whole suite.
+        with pytest.raises(ConnectionError):
+            await asyncio.wait_for(
+                client.send_command("UPLOAD_MISSION", {"waypoints": []}), timeout=2
+            )
+
+        assert client._pending_acks == {}

@@ -14,12 +14,17 @@ class FakeMissionAgentClient:
         self._host = "127.0.0.1"
         self._port = 5760
         self.connected = False
+        self.disconnect_called = False
         self.telemetry_callback = None
         self.sent_commands: list[tuple[str, dict]] = []
         self.next_acks: list[Ack] = []
 
     async def connect(self) -> None:
         self.connected = True
+
+    async def disconnect(self) -> None:
+        self.disconnect_called = True
+        self.connected = False
 
     def on_telemetry(self, callback):
         self.telemetry_callback = callback
@@ -51,6 +56,19 @@ async def test_connect_marks_state_connected_and_registers_telemetry_callback():
     assert vehicle.state.is_connected is True
     assert vehicle._client.connected is True
     assert vehicle._client.telemetry_callback == vehicle._on_telemetry
+
+
+async def test_disconnect_marks_state_disconnected_and_tears_down_client():
+    """Regression test for Task 9 review Finding 3: disconnect() must
+    actually close the underlying MissionAgentClient connection (and cancel
+    its read loop), not just flip the local is_connected flag."""
+    vehicle = make_vehicle()
+    await vehicle.connect()
+
+    await vehicle.disconnect()
+
+    assert vehicle.state.is_connected is False
+    assert vehicle._client.disconnect_called is True
 
 
 async def test_subscribers_receive_state_on_notify():
