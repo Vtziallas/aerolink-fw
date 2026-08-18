@@ -57,3 +57,24 @@ TEST_CASE("TelemetryPublisher stops cleanly and pushes nothing further", "[telem
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     REQUIRE(sink.count() == count_after_stop);
 }
+
+TEST_CASE("TelemetryPublisher handles double start() safely as a no-op", "[telemetry_publisher]") {
+    StateTracker tracker;
+    RecordingSink sink;
+
+    TelemetryPublisher publisher(tracker, sink, std::chrono::milliseconds(30));
+    publisher.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(80));
+    size_t count_after_first = sink.count();
+
+    // Second start() should be a no-op and not crash
+    publisher.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(80));
+    size_t count_after_second = sink.count();
+
+    publisher.stop();
+
+    // Publisher should still be pushing after double start()
+    REQUIRE(count_after_first >= 1);
+    REQUIRE(count_after_second > count_after_first);
+}

@@ -10,7 +10,9 @@ TelemetryPublisher::TelemetryPublisher(StateTracker& state_tracker, ITelemetrySi
 TelemetryPublisher::~TelemetryPublisher() { stop(); }
 
 void TelemetryPublisher::start() {
-    running_ = true;
+    if (running_.exchange(true)) {
+        return;  // already running, no-op
+    }
     thread_ = std::thread([this]() {
         while (running_) {
             sink_.send_line(serialize_snapshot(state_tracker_.snapshot()));
