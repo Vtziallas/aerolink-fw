@@ -15,7 +15,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-add_executable(mission_agent src/main.cpp src/protocol.cpp src/state_tracker.cpp)
+add_executable(mission_agent src/main.cpp src/protocol.cpp src/state_tracker.cpp src/command_validator.cpp)
 target_link_libraries(mission_agent PRIVATE nlohmann_json::nlohmann_json Threads::Threads)
 
 enable_testing()
