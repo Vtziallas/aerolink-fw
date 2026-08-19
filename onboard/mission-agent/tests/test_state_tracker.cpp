@@ -13,6 +13,7 @@ TEST_CASE("StateTracker starts with sane defaults", "[state_tracker]") {
     REQUIRE_FALSE(snap.armed);
     REQUIRE(snap.flight_mode == "UNKNOWN");
     REQUIRE_FALSE(snap.mission_uploaded);
+    REQUIRE_FALSE(snap.is_armable);
 }
 
 TEST_CASE("StateTracker setters update the snapshot", "[state_tracker]") {
@@ -20,8 +21,8 @@ TEST_CASE("StateTracker setters update the snapshot", "[state_tracker]") {
 
     tracker.set_armed(true);
     tracker.set_flight_mode("MISSION");
-    tracker.set_position(47.4, 8.5, 30.0f);
-    tracker.set_battery(85.5f);
+    tracker.set_position(47.4, 8.5, 30.0f, 518.0f);
+    tracker.set_battery(85.5f, 22.1f);
     tracker.set_health(true, true);
     tracker.set_mission_progress(2, 4);
     tracker.set_mission_uploaded(true);
@@ -32,12 +33,40 @@ TEST_CASE("StateTracker setters update the snapshot", "[state_tracker]") {
     REQUIRE(snap.latitude_deg == 47.4);
     REQUIRE(snap.longitude_deg == 8.5);
     REQUIRE(snap.relative_altitude_m == 30.0f);
+    REQUIRE(snap.absolute_altitude_m == 518.0f);
     REQUIRE(snap.battery_remaining_pct == 85.5f);
+    REQUIRE(snap.battery_voltage_v == 22.1f);
     REQUIRE(snap.is_global_position_ok);
     REQUIRE(snap.is_home_position_ok);
     REQUIRE(snap.mission_current == 2);
     REQUIRE(snap.mission_total == 4);
     REQUIRE(snap.mission_uploaded);
+}
+
+TEST_CASE("StateTracker mirrors attitude and fixed-wing metrics", "[state_tracker]") {
+    StateTracker tracker;
+
+    tracker.set_attitude(1.5f, -2.5f, 91.0f);
+    tracker.set_fixedwing_metrics(16.5f, 18.25f, 274.0f);
+
+    auto snap = tracker.snapshot();
+    REQUIRE(snap.roll_deg == 1.5f);
+    REQUIRE(snap.pitch_deg == -2.5f);
+    REQUIRE(snap.yaw_deg == 91.0f);
+    REQUIRE(snap.airspeed_m_s == 16.5f);
+    REQUIRE(snap.groundspeed_m_s == 18.25f);
+    REQUIRE(snap.heading_deg == 274.0f);
+}
+
+TEST_CASE("StateTracker mirrors PX4's is_armable verdict", "[state_tracker]") {
+    StateTracker tracker;
+    REQUIRE_FALSE(tracker.snapshot().is_armable);
+
+    tracker.set_armable(true);
+    REQUIRE(tracker.snapshot().is_armable);
+
+    tracker.set_armable(false);
+    REQUIRE_FALSE(tracker.snapshot().is_armable);
 }
 
 TEST_CASE("StateTracker is safe under concurrent reads and writes", "[state_tracker]") {
@@ -48,7 +77,7 @@ TEST_CASE("StateTracker is safe under concurrent reads and writes", "[state_trac
     for (int i = 0; i < 8; ++i) {
         threads.emplace_back([&tracker, &violations, i]() {
             for (int j = 0; j < 1000; ++j) {
-                tracker.set_position(static_cast<double>(i), static_cast<double>(j), 0.0f);
+                tracker.set_position(static_cast<double>(i), static_cast<double>(j), 0.0f, 0.0f);
                 auto snap = tracker.snapshot();
                 // set_position holds the lock across both fields, so any
                 // snapshot must see a (lat, lon) pair some single call

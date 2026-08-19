@@ -41,8 +41,19 @@ private:
     IMavlinkConnection& mavlink_;
     StateTracker& state_tracker_;
 
+    // Outcome of one write to the client socket. WouldBlock means nothing
+    // was written and the caller may safely skip this payload (the stream
+    // framing is still intact); ClientGone means the descriptor is dead (or
+    // a half-written line has already broken the framing) and the
+    // connection must be torn down.
+    enum class WriteOutcome { Ok, WouldBlock, ClientGone };
+
     void handle_connection(int client_fd);
-    void send_ack(int client_fd, const Ack& ack);
+    // Returns false if the client is gone and the connection should be
+    // torn down.
+    bool send_ack(int client_fd, const Ack& ack);
+    // Caller must hold client_mutex_.
+    WriteOutcome write_payload(int fd, const std::string& payload, int initial_budget_ms);
 };
 
 }  // namespace mission_agent

@@ -1,5 +1,6 @@
 // onboard/mission-agent/tests/test_telemetry_publisher.cpp
 #include <catch2/catch_test_macros.hpp>
+#include <nlohmann/json.hpp>
 #include <chrono>
 #include <thread>
 #include <vector>
@@ -29,9 +30,57 @@ private:
 };
 }  // namespace
 
+TEST_CASE("serialize_snapshot includes every field the frontend renders", "[telemetry_publisher]") {
+    // The frontend's TelemetryPanel.tsx and MapView.tsx read these exact
+    // names off VehicleState; anything missing here renders as "--" forever
+    // (and MapView stops rotating the aircraft marker).
+    StateSnapshot s;
+    s.armed = true;
+    s.flight_mode = "MISSION";
+    s.latitude_deg = 47.4;
+    s.longitude_deg = 8.5;
+    s.relative_altitude_m = 30.0f;
+    s.absolute_altitude_m = 518.0f;
+    s.roll_deg = 1.5f;
+    s.pitch_deg = -2.5f;
+    s.yaw_deg = 91.0f;
+    s.airspeed_m_s = 16.5f;
+    s.groundspeed_m_s = 18.25f;
+    s.heading_deg = 274.0f;
+    s.battery_remaining_pct = 85.5f;
+    s.battery_voltage_v = 22.1f;
+    s.is_global_position_ok = true;
+    s.is_home_position_ok = true;
+    s.is_armable = true;
+    s.mission_current = 2;
+    s.mission_total = 4;
+
+    auto j = nlohmann::json::parse(TelemetryPublisher::serialize_snapshot(s));
+
+    REQUIRE(j["armed"] == true);
+    REQUIRE(j["flight_mode"] == "MISSION");
+    REQUIRE(j["latitude_deg"] == 47.4);
+    REQUIRE(j["longitude_deg"] == 8.5);
+    REQUIRE(j["relative_altitude_m"] == 30.0f);
+    REQUIRE(j["absolute_altitude_m"] == 518.0f);
+    REQUIRE(j["roll_deg"] == 1.5f);
+    REQUIRE(j["pitch_deg"] == -2.5f);
+    REQUIRE(j["yaw_deg"] == 91.0f);
+    REQUIRE(j["airspeed_m_s"] == 16.5f);
+    REQUIRE(j["groundspeed_m_s"] == 18.25f);
+    REQUIRE(j["heading_deg"] == 274.0f);
+    REQUIRE(j["battery_remaining_pct"] == 85.5f);
+    REQUIRE(j["battery_voltage_v"] == 22.1f);
+    REQUIRE(j["is_global_position_ok"] == true);
+    REQUIRE(j["is_home_position_ok"] == true);
+    REQUIRE(j["is_armable"] == true);
+    REQUIRE(j["mission_current"] == 2);
+    REQUIRE(j["mission_total"] == 4);
+}
+
 TEST_CASE("TelemetryPublisher pushes snapshots at roughly the configured interval", "[telemetry_publisher]") {
     StateTracker tracker;
-    tracker.set_position(47.4, 8.5, 30.0f);
+    tracker.set_position(47.4, 8.5, 30.0f, 518.0f);
     RecordingSink sink;
 
     TelemetryPublisher publisher(tracker, sink, std::chrono::milliseconds(50));

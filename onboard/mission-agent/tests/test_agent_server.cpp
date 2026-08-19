@@ -16,13 +16,14 @@ namespace {
 
 class FakeMavlinkConnection : public IMavlinkConnection {
 public:
-    bool is_connected() const override { return true; }
+    bool is_connected() const override { return connected; }
     MavlinkResult upload_mission(const std::vector<Waypoint>&) override {
         return upload_result;
     }
     MavlinkResult start_mission() override { return start_result; }
     MavlinkResult return_to_launch() override { return rtl_result; }
 
+    bool connected = true;
     MavlinkResult upload_result{true, ""};
     MavlinkResult start_result{true, ""};
     MavlinkResult rtl_result{true, ""};
@@ -66,13 +67,14 @@ TEST_CASE("AgentServer sends the full ack chain for an accepted START_MISSION", 
     CommandValidator validator(test_geofence());
     FakeMavlinkConnection mavlink;
     StateTracker tracker;
+    tracker.set_health(true, true);  // PX4 position/home settled -- see CommandValidator
     tracker.set_mission_uploaded(true);
 
     AgentServer server(15551, validator, mavlink, tracker);
     std::thread server_thread([&server]() { server.run(); });
 
     int client_fd = connect_with_retry(15551);
-    std::string command = R"({"command_id":"c1","aircraft_id":"a1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
+    std::string command = R"({"command_id":"c1","aircraft_id":"aerolink-1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
     command += "\n";
     write(client_fd, command.c_str(), command.size());
 
@@ -100,7 +102,7 @@ TEST_CASE("AgentServer rejects START_MISSION with no mission uploaded and stops 
     std::thread server_thread([&server]() { server.run(); });
 
     int client_fd = connect_with_retry(15552);
-    std::string command = R"({"command_id":"c2","aircraft_id":"a1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
+    std::string command = R"({"command_id":"c2","aircraft_id":"aerolink-1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
     command += "\n";
     write(client_fd, command.c_str(), command.size());
 
@@ -121,13 +123,14 @@ TEST_CASE("AgentServer does not send ACCEPTED when the MAVSDK call fails", "[age
     FakeMavlinkConnection mavlink;
     mavlink.start_result = MavlinkResult{false, "px4 rejected arm"};
     StateTracker tracker;
+    tracker.set_health(true, true);  // PX4 position/home settled -- see CommandValidator
     tracker.set_mission_uploaded(true);
 
     AgentServer server(15554, validator, mavlink, tracker);
     std::thread server_thread([&server]() { server.run(); });
 
     int client_fd = connect_with_retry(15554);
-    std::string command = R"({"command_id":"c3","aircraft_id":"a1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
+    std::string command = R"({"command_id":"c3","aircraft_id":"aerolink-1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
     command += "\n";
     write(client_fd, command.c_str(), command.size());
 
@@ -167,4 +170,63 @@ TEST_CASE("AgentServer send_line reaches a connected client via the telemetry si
     close(client_fd);
     server.stop();
     server_thread.join();
+}
+
+TEST_CASE("AgentServer rejects commands with a clear reason when the PX4 link is down", "[agent_server]") {
+    // The design doc requires a clear rejection, not a hang, when PX4 is
+    // unreachable -- IMavlinkConnection::is_connected() exists for exactly
+    // this and was previously never consulted.
+    CommandValidator validator(test_geofence());
+    FakeMavlinkConnection mavlink;
+    mavlink.connected = false;
+    StateTracker tracker;
+    tracker.set_health(true, true);
+    tracker.set_mission_uploaded(true);
+
+    AgentServer server(15555, validator, mavlink, tracker);
+    std::thread server_thread([&server]() { server.run(); });
+
+    int client_fd = connect_with_retry(15555);
+    std::string command = R"({"command_id":"c4","aircraft_id":"aerolink-1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
+    command += "\n";
+    REQUIRE(write(client_fd, command.c_str(), command.size()) == static_cast<ssize_t>(command.size()));
+
+    std::string first = read_line(client_fd);
+    std::string second = read_line(client_fd);
+    std::string third = read_line(client_fd);
+
+    REQUIRE(first.find("RECEIVED") != std::string::npos);
+    REQUIRE(second.find("VALIDATED") != std::string::npos);
+    REQUIRE(third.find("REJECTED") != std::string::npos);
+    REQUIRE(third.find("PX4 link down") != std::string::npos);
+
+    close(client_fd);
+    server.stop();
+    server_thread.join();
+}
+
+TEST_CASE("AgentServer survives a client that vanishes mid-telemetry", "[agent_server]") {
+    // Regression test for the SIGPIPE crash: writing to a closed peer must
+    // report an error the server handles, not terminate the process. Also
+    // covers clearing client_fd_ so the next push doesn't reuse a dead fd.
+    CommandValidator validator(test_geofence());
+    FakeMavlinkConnection mavlink;
+    StateTracker tracker;
+
+    AgentServer server(15556, validator, mavlink, tracker);
+    std::thread server_thread([&server]() { server.run(); });
+
+    int client_fd = connect_with_retry(15556);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));  // let accept() register the client
+    close(client_fd);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    ITelemetrySink& sink = server;
+    for (int i = 0; i < 5; ++i) {
+        sink.send_line(R"({"latitude_deg":47.4})");  // must not raise, must not kill us
+    }
+
+    server.stop();
+    server_thread.join();
+    SUCCEED("server still alive after writing to a vanished client");
 }

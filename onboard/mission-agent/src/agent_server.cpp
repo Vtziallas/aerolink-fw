@@ -1,13 +1,41 @@
 // onboard/mission-agent/src/agent_server.cpp
 #include "agent_server.h"
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <algorithm>
+#include <cerrno>
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 
 namespace mission_agent {
+
+namespace {
+
+// How long send_ack is willing to wait for a backed-up socket to drain.
+// Acks are the operator-visible half of the protocol -- a dropped ack
+// leaves the backend waiting on a command it will never hear about -- so
+// they get a real (if bounded) retry budget, unlike telemetry samples.
+constexpr int kAckWriteBudgetMs = 2000;
+
+// Telemetry gets no waiting budget at all: if the socket is full, the
+// newest sample is dropped rather than blocking the command path behind a
+// degraded link. A dropped telemetry sample is stale data nobody misses;
+// a blocked write holds client_mutex_ and wedges acks too.
+constexpr int kTelemetryWriteBudgetMs = 0;
+
+// Once part of a line is on the wire we can't just give up -- a truncated
+// JSON line corrupts the framing for everything after it. Wait this long
+// to finish the line, then treat the client as gone.
+constexpr int kPartialLineFlushBudgetMs = 500;
+
+constexpr int kPollSliceMs = 50;
+
+}  // namespace
 
 AgentServer::AgentServer(int port, CommandValidator& validator, IMavlinkConnection& mavlink, StateTracker& state_tracker)
     : port_(port), validator_(validator), mavlink_(mavlink), state_tracker_(state_tracker) {}
@@ -40,6 +68,17 @@ void AgentServer::run() {
             if (!running_) break;
             continue;
         }
+        // Non-blocking so a backend that has stopped reading (a degraded
+        // tunnel rather than a clean disconnect) can never park a write --
+        // and with it client_mutex_, and with it the whole command path --
+        // inside the kernel's send buffer.
+        int flags = fcntl(fd, F_GETFL, 0);
+        if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+            std::cerr << "mission_agent: could not set client socket non-blocking: "
+                      << std::strerror(errno) << "\n";
+            close(fd);
+            continue;
+        }
         {
             std::lock_guard<std::mutex> lock(client_mutex_);
             client_fd_ = fd;
@@ -62,26 +101,116 @@ void AgentServer::stop() {
     }
 }
 
+AgentServer::WriteOutcome AgentServer::write_payload(int fd, const std::string& payload,
+                                                    int initial_budget_ms) {
+    size_t sent = 0;
+    int waited_ms = 0;
+
+    while (sent < payload.size()) {
+        // send(..., MSG_NOSIGNAL) rather than write(): a peer that has gone
+        // away must surface as EPIPE here, never as a SIGPIPE. main() also
+        // ignores SIGPIPE process-wide, but this keeps the class safe on its
+        // own (and testable without main()'s signal setup).
+        ssize_t n = send(fd, payload.data() + sent, payload.size() - sent, MSG_NOSIGNAL);
+        if (n > 0) {
+            sent += static_cast<size_t>(n);
+            continue;
+        }
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            const int budget = (sent == 0) ? initial_budget_ms : kPartialLineFlushBudgetMs;
+            if (waited_ms >= budget) {
+                // Nothing on the wire yet -- the caller can drop this
+                // payload and the stream stays well-formed. If we'd already
+                // written part of the line, the framing is broken and the
+                // only honest thing left is to drop the client.
+                return sent == 0 ? WriteOutcome::WouldBlock : WriteOutcome::ClientGone;
+            }
+            pollfd pfd{fd, POLLOUT, 0};
+            const int slice = std::min(kPollSliceMs, budget - waited_ms);
+            const int ready = poll(&pfd, 1, slice);
+            if (ready < 0 && errno != EINTR) return WriteOutcome::ClientGone;
+            if (ready > 0 && (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+                return WriteOutcome::ClientGone;
+            }
+            waited_ms += slice;
+            continue;
+        }
+        // EPIPE / ECONNRESET / EBADF: the peer is gone. SIGPIPE is ignored
+        // process-wide (see main.cpp), so this surfaces as an error return
+        // rather than killing the agent.
+        return WriteOutcome::ClientGone;
+    }
+    return WriteOutcome::Ok;
+}
+
 void AgentServer::send_line(const std::string& line) {
     std::lock_guard<std::mutex> lock(client_mutex_);
     if (client_fd_ < 0) return;  // no-op if nobody's connected
     std::string payload = line;
     if (payload.empty() || payload.back() != '\n') payload += "\n";
-    write(client_fd_, payload.c_str(), payload.size());
+
+    switch (write_payload(client_fd_, payload, kTelemetryWriteBudgetMs)) {
+        case WriteOutcome::Ok:
+            break;
+        case WriteOutcome::WouldBlock:
+            // Backpressure: the backend isn't draining fast enough. Dropping
+            // the newest telemetry sample is the correct trade -- it's a
+            // sampled stream, and blocking here would stall acks too.
+            break;
+        case WriteOutcome::ClientGone:
+            // Don't leave client_fd_ pointing at a dead descriptor; the next
+            // telemetry push (250ms away, on another thread) would otherwise
+            // write to it again.
+            client_fd_ = -1;
+            break;
+    }
 }
 
-void AgentServer::send_ack(int client_fd, const Ack& ack) {
-    std::string line = serialize_ack(ack);
+bool AgentServer::send_ack(int client_fd, const Ack& ack) {
+    const std::string line = serialize_ack(ack);
     std::lock_guard<std::mutex> lock(client_mutex_);
-    write(client_fd, line.c_str(), line.size());
+    if (client_fd_ < 0) return false;
+
+    const WriteOutcome outcome = write_payload(client_fd, line, kAckWriteBudgetMs);
+    if (outcome == WriteOutcome::Ok) return true;
+
+    if (outcome == WriteOutcome::WouldBlock) {
+        // Backed up for the whole ack budget. Nothing was written, so the
+        // stream is still well-formed, but the backend is not keeping up
+        // with a link this degraded -- log it loudly and keep the
+        // connection; the backend's own ack timeout will surface it.
+        std::cerr << "mission_agent: dropped " << to_string(ack.status)
+                  << " ack for command_id=" << ack.command_id
+                  << " (client not reading for " << kAckWriteBudgetMs << "ms)\n";
+        return true;
+    }
+
+    if (client_fd_ == client_fd) client_fd_ = -1;
+    return false;
 }
 
 void AgentServer::handle_connection(int client_fd) {
     std::string buffer;
     char chunk[1024];
     while (running_) {
+        // The client socket is non-blocking (see run()), so poll for
+        // readability instead of parking in read(). The timeout also keeps
+        // running_ checked regularly so stop() is observed promptly.
+        pollfd pfd{client_fd, POLLIN, 0};
+        const int ready = poll(&pfd, 1, 200);
+        if (ready < 0) {
+            if (errno == EINTR) continue;
+            return;
+        }
+        if (ready == 0) continue;
+
         ssize_t n = read(client_fd, chunk, sizeof(chunk));
-        if (n <= 0) return;  // connection closed or error -- SAFETY.md's LTE_LOST case, not an error to log loudly
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue;
+            return;
+        }
+        if (n == 0) return;  // connection closed -- SAFETY.md's LTE_LOST case, not an error to log loudly
         buffer.append(chunk, static_cast<size_t>(n));
 
         size_t newline;
@@ -94,18 +223,31 @@ void AgentServer::handle_connection(int client_fd) {
             try {
                 command = parse_command(line);
             } catch (const std::invalid_argument&) {
-                send_ack(client_fd, Ack{"", AckStatus::Rejected, "malformed command"});
+                // command_id is unknowable when the JSON itself didn't parse,
+                // so this ack can't be routed to an in-flight command on the
+                // backend -- it's logged there as an unmatched ack instead
+                // (see mission_agent_client.py's _read_until_closed).
+                if (!send_ack(client_fd, Ack{"", AckStatus::Rejected, "malformed command"})) return;
                 continue;
             }
 
-            send_ack(client_fd, Ack{command.command_id, AckStatus::Received, ""});
+            if (!send_ack(client_fd, Ack{command.command_id, AckStatus::Received, ""})) return;
 
             auto validation = validator_.validate(command, state_tracker_.snapshot());
             if (!validation.is_valid) {
-                send_ack(client_fd, Ack{command.command_id, AckStatus::Rejected, validation.reason});
+                if (!send_ack(client_fd, Ack{command.command_id, AckStatus::Rejected, validation.reason})) return;
                 continue;
             }
-            send_ack(client_fd, Ack{command.command_id, AckStatus::Validated, ""});
+            if (!send_ack(client_fd, Ack{command.command_id, AckStatus::Validated, ""})) return;
+
+            // The design doc's "PX4 connection lost/not yet established"
+            // case: reject clearly rather than handing the command to a
+            // MAVSDK plugin with no system behind it and hanging on its
+            // internal timeout.
+            if (!mavlink_.is_connected()) {
+                if (!send_ack(client_fd, Ack{command.command_id, AckStatus::Rejected, "PX4 link down"})) return;
+                continue;
+            }
 
             MavlinkResult result{true, ""};
             switch (command.command_type) {
@@ -121,12 +263,12 @@ void AgentServer::handle_connection(int client_fd) {
             }
 
             if (!result.success) {
-                send_ack(client_fd, Ack{command.command_id, AckStatus::Rejected, result.error_message});
+                if (!send_ack(client_fd, Ack{command.command_id, AckStatus::Rejected, result.error_message})) return;
                 continue;
             }
-            send_ack(client_fd, Ack{command.command_id, AckStatus::Accepted, ""});
+            if (!send_ack(client_fd, Ack{command.command_id, AckStatus::Accepted, ""})) return;
             if (command.command_type == CommandType::StartMission || command.command_type == CommandType::ReturnToLaunch) {
-                send_ack(client_fd, Ack{command.command_id, AckStatus::Px4ActionStarted, ""});
+                if (!send_ack(client_fd, Ack{command.command_id, AckStatus::Px4ActionStarted, ""})) return;
             }
         }
     }

@@ -68,15 +68,30 @@ void MavlinkConnection::subscribe_telemetry() {
     });
 
     telemetry_->subscribe_position([this](mavsdk::Telemetry::Position position) {
-        state_tracker_.set_position(position.latitude_deg, position.longitude_deg, position.relative_altitude_m);
+        state_tracker_.set_position(position.latitude_deg, position.longitude_deg,
+                                    position.relative_altitude_m, position.absolute_altitude_m);
+    });
+
+    telemetry_->subscribe_attitude_euler([this](mavsdk::Telemetry::EulerAngle attitude) {
+        state_tracker_.set_attitude(attitude.roll_deg, attitude.pitch_deg, attitude.yaw_deg);
+    });
+
+    // FixedwingMetrics is where PX4 reports airspeed/groundspeed/heading for
+    // this airframe (a QuadPlane VTOL -- see docs/adr/0002). These are the
+    // fields the frontend's TelemetryPanel renders and MapView rotates the
+    // aircraft marker with, so dropping them blanks real UI.
+    telemetry_->subscribe_fixedwing_metrics([this](mavsdk::Telemetry::FixedwingMetrics metrics) {
+        state_tracker_.set_fixedwing_metrics(metrics.airspeed_m_s, metrics.groundspeed_m_s,
+                                             metrics.heading_deg);
     });
 
     telemetry_->subscribe_battery([this](mavsdk::Telemetry::Battery battery) {
-        state_tracker_.set_battery(battery.remaining_percent);
+        state_tracker_.set_battery(battery.remaining_percent, battery.voltage_v);
     });
 
     telemetry_->subscribe_health([this](mavsdk::Telemetry::Health health) {
         state_tracker_.set_health(health.is_global_position_ok, health.is_home_position_ok);
+        state_tracker_.set_armable(health.is_armable);
     });
 
     mission_->subscribe_mission_progress([this](mavsdk::Mission::MissionProgress progress) {

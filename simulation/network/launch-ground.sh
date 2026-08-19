@@ -15,7 +15,24 @@ REAL_USER="${SUDO_USER:-youruser}"
 BACKEND_DIR="/mnt/c/Users/youruser/git/uav_project/ground-station/backend"
 LOG_FILE="/tmp/backend_ground_net.log"
 
+# The backend and the Mission Agent validate missions against this geofence
+# independently (see docs/architecture/mission-agent-design.md's "validation
+# stays double-layered"), so the two only agree if they get the same values --
+# and they are launched by two different scripts. Any override here must be
+# made in launch-aircraft.sh's matching env block too, and vice versa.
+# Same defaults as ground-station/backend/app/config.py.
+GEOFENCE_CENTER_LAT_DEG="${GEOFENCE_CENTER_LAT_DEG:-47.397742}"
+GEOFENCE_CENTER_LON_DEG="${GEOFENCE_CENTER_LON_DEG:-8.545593}"
+GEOFENCE_RADIUS_M="${GEOFENCE_RADIUS_M:-2000.0}"
+MIN_ALTITUDE_M="${MIN_ALTITUDE_M:-10.0}"
+MAX_ALTITUDE_M="${MAX_ALTITUDE_M:-120.0}"
+
 exec ip netns exec ground-net sudo -u "$REAL_USER" env \
   MISSION_AGENT_HOST="10.99.0.2" MISSION_AGENT_PORT="5760" \
+  GEOFENCE_CENTER_LAT_DEG="$GEOFENCE_CENTER_LAT_DEG" \
+  GEOFENCE_CENTER_LON_DEG="$GEOFENCE_CENTER_LON_DEG" \
+  GEOFENCE_RADIUS_M="$GEOFENCE_RADIUS_M" \
+  MIN_ALTITUDE_M="$MIN_ALTITUDE_M" \
+  MAX_ALTITUDE_M="$MAX_ALTITUDE_M" \
   bash -c "cd '$BACKEND_DIR' && exec /home/$REAL_USER/venvs/aerolink-backend/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000" \
   > "$LOG_FILE" 2>&1 < /dev/null
