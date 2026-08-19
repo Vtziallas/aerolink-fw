@@ -71,4 +71,14 @@ ip netns exec aircraft-net sudo -u "$REAL_USER" env \
   "$AGENT_BIN" > "$AGENT_LOG_FILE" 2>&1 < /dev/null &
 AGENT_PID=$!
 
-wait "$PX4_PID" "$AGENT_PID"
+# wait -n (not `wait "$PX4_PID" "$AGENT_PID"`) returns as soon as EITHER
+# process exits, so a single crashed child triggers script exit here --
+# either directly (a non-zero exit under `set -e`) or via the explicit
+# kill/exit below (a clean exit) -- and the EXIT trap above then cleans up
+# the survivor instead of leaving it orphaned in the namespace with its
+# port still bound. The `|| true` guards mean a process that's already
+# gone by the time we try to kill/wait it doesn't itself trip `set -e`.
+wait -n || true
+kill "$PX4_PID" "$AGENT_PID" 2>/dev/null || true
+wait "$PX4_PID" "$AGENT_PID" 2>/dev/null || true
+exit 0
