@@ -65,9 +65,12 @@ class VehicleConnection:
     async def connect(self) -> None:
         logger.info("Connecting to mission agent at %s:%s", self._client._host, self._client._port)
         self._client.on_telemetry(self._on_telemetry)
+        # The client owns reconnection, so is_connected has to be driven by
+        # its callback rather than set once here: otherwise /api/status keeps
+        # reporting a connected vehicle after the link drops, and
+        # /api/missions' 503 gate never fires.
+        self._client.on_connection_change(self._on_connection_change)
         await self._client.connect()
-        self.state.is_connected = True
-        logger.info("Mission agent connected")
 
     async def disconnect(self) -> None:
         self.state.is_connected = False
@@ -91,14 +94,33 @@ class VehicleConnection:
                     pass
             queue.put_nowait(snapshot)
 
+    def _on_connection_change(self, connected: bool) -> None:
+        """Mirror the client's real link state, and push it out immediately --
+        the operator needs to see a dropped link now, not at the next
+        telemetry sample (there won't be one)."""
+        if self.state.is_connected == connected:
+            return
+        logger.info("Mission agent link %s", "up" if connected else "down")
+        self.state.is_connected = connected
+        self._notify()
+
     def _on_telemetry(self, message: dict) -> None:
         self.state.armed = message.get("armed", self.state.armed)
         self.state.flight_mode = message.get("flight_mode", self.state.flight_mode)
         self.state.latitude_deg = message.get("latitude_deg", self.state.latitude_deg)
         self.state.longitude_deg = message.get("longitude_deg", self.state.longitude_deg)
         self.state.relative_altitude_m = message.get("relative_altitude_m", self.state.relative_altitude_m)
+        self.state.absolute_altitude_m = message.get("absolute_altitude_m", self.state.absolute_altitude_m)
+        self.state.roll_deg = message.get("roll_deg", self.state.roll_deg)
+        self.state.pitch_deg = message.get("pitch_deg", self.state.pitch_deg)
+        self.state.yaw_deg = message.get("yaw_deg", self.state.yaw_deg)
+        self.state.airspeed_m_s = message.get("airspeed_m_s", self.state.airspeed_m_s)
+        self.state.groundspeed_m_s = message.get("groundspeed_m_s", self.state.groundspeed_m_s)
+        self.state.heading_deg = message.get("heading_deg", self.state.heading_deg)
         self.state.battery_remaining_pct = message.get("battery_remaining_pct", self.state.battery_remaining_pct)
+        self.state.battery_voltage_v = message.get("battery_voltage_v", self.state.battery_voltage_v)
         self.state.is_gps_ok = message.get("is_global_position_ok", self.state.is_gps_ok)
+        self.state.is_armable = message.get("is_armable", self.state.is_armable)
         self.state.mission_current = message.get("mission_current", self.state.mission_current)
         self.state.mission_total = message.get("mission_total", self.state.mission_total)
         self._notify()

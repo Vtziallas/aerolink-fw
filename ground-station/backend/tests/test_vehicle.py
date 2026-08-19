@@ -16,18 +16,30 @@ class FakeMissionAgentClient:
         self.connected = False
         self.disconnect_called = False
         self.telemetry_callback = None
+        self.connection_callback = None
         self.sent_commands: list[tuple[str, dict]] = []
         self.next_acks: list[Ack] = []
 
     async def connect(self) -> None:
         self.connected = True
+        self._report_connection(True)
 
     async def disconnect(self) -> None:
         self.disconnect_called = True
         self.connected = False
+        self._report_connection(False)
 
     def on_telemetry(self, callback):
         self.telemetry_callback = callback
+
+    def on_connection_change(self, callback):
+        self.connection_callback = callback
+
+    def _report_connection(self, connected: bool) -> None:
+        """The real client drives is_connected through this callback (it owns
+        reconnection), so the fake has to as well."""
+        if self.connection_callback is not None:
+            self.connection_callback(connected)
 
     async def send_command(self, command_type, parameters, mission_version=1, aircraft_id="aerolink-1"):
         self.sent_commands.append((command_type, parameters))
@@ -105,6 +117,67 @@ async def test_slow_subscriber_queue_drops_oldest_instead_of_blocking():
     snapshot = await asyncio.wait_for(queue.get(), timeout=1)
     assert snapshot["heading_deg"] == 20.0
     assert queue.empty()
+
+
+async def test_link_drop_marks_state_disconnected_and_notifies_subscribers():
+    """Final-review Finding C1: is_connected was set True once in connect()
+    and never set back, so /api/status kept reporting a connected vehicle
+    after the link dropped and the /api/missions 503 gate never fired."""
+    vehicle = make_vehicle()
+    await vehicle.connect()
+    queue = vehicle.subscribe()
+
+    vehicle._client._report_connection(False)
+
+    assert vehicle.state.is_connected is False
+    snapshot = await asyncio.wait_for(queue.get(), timeout=1)
+    assert snapshot["is_connected"] is False
+
+    # ...and back up again when the client reconnects on its own.
+    vehicle._client._report_connection(True)
+    assert vehicle.state.is_connected is True
+    snapshot = await asyncio.wait_for(queue.get(), timeout=1)
+    assert snapshot["is_connected"] is True
+
+
+async def test_on_telemetry_populates_every_field_the_frontend_renders():
+    """Final-review Finding I2: eight fields TelemetryPanel.tsx/MapView.tsx
+    render were dropped from the agent's telemetry and stayed null."""
+    vehicle = make_vehicle()
+
+    vehicle._on_telemetry(
+        {
+            "armed": True,
+            "flight_mode": "MISSION",
+            "latitude_deg": 47.4,
+            "longitude_deg": 8.5,
+            "relative_altitude_m": 30.0,
+            "absolute_altitude_m": 518.0,
+            "roll_deg": 1.5,
+            "pitch_deg": -2.5,
+            "yaw_deg": 91.0,
+            "airspeed_m_s": 16.5,
+            "groundspeed_m_s": 18.25,
+            "heading_deg": 274.0,
+            "battery_remaining_pct": 85.5,
+            "battery_voltage_v": 22.1,
+            "is_global_position_ok": True,
+            "is_armable": True,
+            "mission_current": 2,
+            "mission_total": 4,
+        }
+    )
+
+    state = vehicle.state
+    assert state.absolute_altitude_m == 518.0
+    assert (state.roll_deg, state.pitch_deg, state.yaw_deg) == (1.5, -2.5, 91.0)
+    assert state.airspeed_m_s == 16.5
+    assert state.groundspeed_m_s == 18.25
+    assert state.heading_deg == 274.0
+    assert state.battery_voltage_v == 22.1
+    assert state.is_armable is True
+    assert state.is_gps_ok is True
+    assert (state.mission_current, state.mission_total) == (2, 4)
 
 
 async def test_on_telemetry_updates_state_and_notifies_subscribers():
