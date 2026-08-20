@@ -127,3 +127,39 @@ process's self-report being trusted at face value.
   persists across a VM restart. Not a new finding, just re-confirming
   `NETWORKING.md`'s existing framing of the netns setup as needing to be
   redone per WSL session.
+
+## Live re-verification after the final-review fix wave (2026-08-20)
+
+The final whole-branch review (see the design doc's commit history / SDD
+ledger) found real gaps the per-task reviews missed and flagged two of the
+fixes -- the 8 restored telemetry fields (`absolute_altitude_m`, roll/pitch/yaw,
+airspeed/groundspeed/heading, battery voltage) and the backend's new
+reconnect-after-drop logic -- as compile/unit-test verified only, with a
+specific recommendation to confirm both against live PX4 before treating them
+as done. Re-ran the setup and confirmed both directly:
+
+**Telemetry fields:** flew another mission, captured a live frame off
+`/ws/telemetry` mid-mission. All 8 previously-null fields came back with real,
+non-zero, plausible values -- e.g. `absolute_altitude_m: 489.84`,
+`airspeed_m_s: 0.098`, `groundspeed_m_s: 0.052`, `battery_voltage_v: 16.2`.
+This specifically closes the flagged residual risk that `fixedwing_metrics()`
+might read zero while a QuadPlane VTOL is in multicopter/hover mode -- it
+didn't; the data populated correctly.
+
+**Reconnect behavior:** force-killed the backend process mid-session and
+confirmed via `ps aux` that the Mission Agent kept running (the SIGPIPE fix
+holding up under a real client disconnect, not just the unit test's simulated
+one). Relaunched the backend and confirmed it reconnected cleanly
+(`/api/status` back to `vehicle_connected: true`) with no manual intervention
+beyond the normal launch command.
+
+**Not tested this pass, left as a genuine follow-up:** a silent, sustained
+100%-packet-loss outage (both processes alive, no clean disconnect) rather
+than a process kill -- per the final review's own analysis, this would fall
+back to TCP's own retransmission timeout (`tcp_retries2`, ~15 min) before the
+reconnect logic even notices, since neither peer ever sees EOF or an error.
+`tests/simulation/link_interruption_reconnection.md`'s original pass criteria
+should still hold (TCP itself carries a short outage), but a true long silent
+outage isn't covered by anything built in this branch and would need an
+application-level heartbeat to detect faster -- worth a future test/fix pass,
+not a blocker for this one.
