@@ -44,7 +44,7 @@ Conditions to simulate, each with SETUP / ACTION / EXPECTED RESULT / PASS CRITER
 - [x] Connection interruption and full disconnection — `tests/simulation/link_interruption_reconnection.md`
 - [x] Reconnection after outage — same test, covers backend auto-resync without a restart
 - [x] Backend restart — `tests/simulation/network_outage_during_mission.md`'s restart step
-- [ ] Companion-service restart — not distinct from "backend restart" yet, since there's no separate onboard companion process until the C++ mission agent exists (later milestone)
+- [x] Companion-service restart — `tests/simulation/companion_service_restart.md`: killing only the Mission Agent process mid-flight leaves PX4 unaffected (mission completes, lands, disarms normally) and the backend auto-reconnects once the agent is relaunched, no backend restart needed
 - [ ] Stale command / duplicate command — needs the `command_id`/replay-protection layer, deliberately not built yet (see `NETWORKING.md`)
 - [x] Malformed command — covered as application-layer robustness, not network fault injection: Pydantic schema validation rejects malformed mission requests (`ground-station/backend/tests/test_mission.py`)
 - [x] Attempted waypoint outside geofence — `ground-station/backend/tests/test_mission.py`
@@ -202,16 +202,17 @@ buffering under bad links). The command-replay-protection gap (stale/duplicate
 integration pass used the same simple JSON protocol the design doc specified,
 which explicitly deferred that. And the "distinct onboard companion process"
 now genuinely exists (closing a structural gap this document flagged as
-needing infrastructure not yet built), but a companion-service-restart fault
-test (crash the Mission Agent specifically, confirm PX4/backend behavior,
-distinct from a plain backend restart) has not actually been run yet -- worth
-doing as real Phase 5-style fault injection now that the infrastructure to do
-it finally exists, not assumed safe by analogy to the backend-restart test.
+needing infrastructure not yet built), and the companion-service-restart
+fault test (crash the Mission Agent specifically, confirm PX4/backend
+behavior, distinct from a plain backend restart) has now actually been run --
+see `tests/simulation/companion_service_restart.md`. It also surfaced and
+fixed a real bug: missions were landing at the last waypoint instead of
+returning home.
 
 ## Status
 
 **Milestone 1 is complete.** SITL, backend, frontend, mission upload/validation/execution, live telemetry, emergency RTL, and the network-outage/failsafe behavior are all working end-to-end and verified against live PX4 SITL.
 
-**Phase 4 (network split) and Phase 5 (fault injection) are complete**, aside from items that need infrastructure not yet built (command auth for stale/duplicate command rejection -- still open). The companion-service-restart test that needed a distinct onboard process now has that infrastructure (see "Mission Agent Integration" below), but the actual fault-injection test hasn't been run yet. Backend and PX4 communicate over a real WireGuard tunnel between two isolated Linux network namespaces (`NETWORKING.md`'s Phase 4 Implementation section). The aircraft was flown, or attempted to be recovered, under 250ms latency, 15% packet loss, and a full mid-flight link interruption + reconnection -- all passing, all documented in `tests/simulation/`.
+**Phase 4 (network split) and Phase 5 (fault injection) are complete**, aside from items that need infrastructure not yet built (command auth for stale/duplicate command rejection -- still open). The companion-service-restart test that needed a distinct onboard process now has that infrastructure (see "Mission Agent Integration" below) and has been run -- see `tests/simulation/companion_service_restart.md`. Backend and PX4 communicate over a real WireGuard tunnel between two isolated Linux network namespaces (`NETWORKING.md`'s Phase 4 Implementation section). The aircraft was flown, or attempted to be recovered, under 250ms latency, 15% packet loss, and a full mid-flight link interruption + reconnection -- all passing, all documented in `tests/simulation/`.
 
 **Phase 6 (failsafe testing) is complete, aside from GPS degradation/loss**, which is blocked on simulator backend choice (needs Gazebo/mavlink-simulator, not SIH) and tracked honestly as not attempted rather than assumed to work. Battery failsafe and geofence breach (both pre-flight rejection and genuine in-flight recovery) are fully verified.
