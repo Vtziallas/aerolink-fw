@@ -117,13 +117,16 @@ MavlinkResult MavlinkConnection::upload_mission(const std::vector<Waypoint>& way
         item.vehicle_action = mavsdk::Mission::MissionItem::VehicleAction::None;
         items.push_back(item);
     }
-    // Auto-append a landing item at the last waypoint's location, matching
-    // the existing backend behavior in app/vehicle.py's upload_mission --
-    // PX4 fixed-wing/VTOL missions reject outright without one.
+    // Auto-append a landing item at the home position, so the mission always
+    // returns before landing rather than landing wherever the last waypoint
+    // happens to be. PX4 fixed-wing/VTOL missions reject outright without a
+    // terminal item (see git blame for the original last-waypoint version
+    // this replaced).
     if (!waypoints.empty()) {
+        auto home = telemetry_->home();
         mavsdk::Mission::MissionItem land;
-        land.latitude_deg = waypoints.back().latitude_deg;
-        land.longitude_deg = waypoints.back().longitude_deg;
+        land.latitude_deg = home.latitude_deg;
+        land.longitude_deg = home.longitude_deg;
         land.relative_altitude_m = 0.0f;
         land.speed_m_s = 15.0f;
         land.is_fly_through = true;
