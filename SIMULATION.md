@@ -45,7 +45,7 @@ Conditions to simulate, each with SETUP / ACTION / EXPECTED RESULT / PASS CRITER
 - [x] Reconnection after outage — same test, covers backend auto-resync without a restart
 - [x] Backend restart — `tests/simulation/network_outage_during_mission.md`'s restart step
 - [x] Companion-service restart — `tests/simulation/companion_service_restart.md`: killing only the Mission Agent process mid-flight leaves PX4 unaffected (mission completes, lands, disarms normally) and the backend auto-reconnects once the agent is relaunched, no backend restart needed
-- [ ] Stale command / duplicate command — needs the `command_id`/replay-protection layer, deliberately not built yet (see `NETWORKING.md`)
+- [x] Stale command / duplicate command — `tests/simulation/command_replay_protection.md`: `ReplayGuard` rejects stale timestamps and replayed `command_id`s (see `NETWORKING.md`)
 - [x] Malformed command — covered as application-layer robustness, not network fault injection: Pydantic schema validation rejects malformed mission requests (`ground-station/backend/tests/test_mission.py`)
 - [x] Attempted waypoint outside geofence — `ground-station/backend/tests/test_mission.py`
 - [ ] Low-battery condition — deferred; requires overriding SITL's `SIM_BAT_MIN_PCT` (currently floors the simulated battery at 50%, a deliberate PX4 testing default -- see Phase 3 findings)
@@ -198,9 +198,8 @@ Network Manager (the other two `onboard/` services) are still unbuilt --
 the Mission Agent's own `TelemetryPublisher` is a deliberately minimal
 stand-in (see the design doc), not those services' real design (rate-classing,
 buffering under bad links). The command-replay-protection gap (stale/duplicate
-`command_id` rejection) noted in `NETWORKING.md` is still open -- this
-integration pass used the same simple JSON protocol the design doc specified,
-which explicitly deferred that. And the "distinct onboard companion process"
+`command_id` rejection) noted in `NETWORKING.md` has since been closed -- see
+`tests/simulation/command_replay_protection.md`. And the "distinct onboard companion process"
 now genuinely exists (closing a structural gap this document flagged as
 needing infrastructure not yet built), and the companion-service-restart
 fault test (crash the Mission Agent specifically, confirm PX4/backend

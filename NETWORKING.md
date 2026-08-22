@@ -87,4 +87,4 @@ Scripts: [`simulation/network/`](simulation/network/).
 
 ## Status
 
-Application-layer auth (command signing, replay protection, per-state command authorization -- Layers 3-6 above) is still design-only; not needed yet since there's no untrusted party on this tunnel to defend against in simulation. The rendezvous-server hop (vs. today's direct 2-peer tunnel) is deferred until there's a real UAV with no public IP to solve NAT traversal for.
+**Replay protection is implemented** (2026-08-22): the Mission Agent's `CommandValidator` rejects any command whose `timestamp` has aged out of a 30s freshness window (in either direction) or whose `command_id` has already been seen within that window -- see `ReplayGuard` (`onboard/mission-agent/src/replay_guard.h/.cpp`) and `tests/simulation/command_replay_protection.md`. Command signing and per-state command authorization (the rest of Layers 3-6 above) remain design-only; not needed yet since there's no untrusted party on this tunnel to defend against in simulation. The rendezvous-server hop (vs. today's direct 2-peer tunnel) is deferred until there's a real UAV with no public IP to solve NAT traversal for.
