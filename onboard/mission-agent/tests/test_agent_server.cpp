@@ -3,7 +3,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <thread>
 #include "../src/agent_server.h"
 #include "../src/command_validator.h"
@@ -31,6 +33,19 @@ public:
 
 GeofenceConfig test_geofence() {
     return GeofenceConfig{47.397742, 8.545593, 2000.0, 10.0f, 120.0f};
+}
+
+// A real "now" timestamp -- CommandValidator now rejects stale timestamps
+// via ReplayGuard, so these raw command payloads can no longer use a fixed
+// placeholder like "t".
+std::string now_timestamp() {
+    std::time_t t = std::time(nullptr);
+    std::tm tm{};
+    gmtime_r(&t, &tm);
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d+00:00", tm.tm_year + 1900, tm.tm_mon + 1,
+                  tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    return buf;
 }
 
 // Connects to 127.0.0.1:port with a short retry loop, since the server
@@ -74,7 +89,8 @@ TEST_CASE("AgentServer sends the full ack chain for an accepted START_MISSION", 
     std::thread server_thread([&server]() { server.run(); });
 
     int client_fd = connect_with_retry(15551);
-    std::string command = R"({"command_id":"c1","aircraft_id":"aerolink-1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
+    std::string command = R"({"command_id":"c1","aircraft_id":"aerolink-1","timestamp":")" + now_timestamp() +
+                          R"(","command_type":"START_MISSION","parameters":{},"mission_version":1})";
     command += "\n";
     write(client_fd, command.c_str(), command.size());
 
@@ -102,7 +118,8 @@ TEST_CASE("AgentServer rejects START_MISSION with no mission uploaded and stops 
     std::thread server_thread([&server]() { server.run(); });
 
     int client_fd = connect_with_retry(15552);
-    std::string command = R"({"command_id":"c2","aircraft_id":"aerolink-1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
+    std::string command = R"({"command_id":"c2","aircraft_id":"aerolink-1","timestamp":")" + now_timestamp() +
+                          R"(","command_type":"START_MISSION","parameters":{},"mission_version":1})";
     command += "\n";
     write(client_fd, command.c_str(), command.size());
 
@@ -130,7 +147,8 @@ TEST_CASE("AgentServer does not send ACCEPTED when the MAVSDK call fails", "[age
     std::thread server_thread([&server]() { server.run(); });
 
     int client_fd = connect_with_retry(15554);
-    std::string command = R"({"command_id":"c3","aircraft_id":"aerolink-1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
+    std::string command = R"({"command_id":"c3","aircraft_id":"aerolink-1","timestamp":")" + now_timestamp() +
+                          R"(","command_type":"START_MISSION","parameters":{},"mission_version":1})";
     command += "\n";
     write(client_fd, command.c_str(), command.size());
 
@@ -187,7 +205,8 @@ TEST_CASE("AgentServer rejects commands with a clear reason when the PX4 link is
     std::thread server_thread([&server]() { server.run(); });
 
     int client_fd = connect_with_retry(15555);
-    std::string command = R"({"command_id":"c4","aircraft_id":"aerolink-1","timestamp":"t","command_type":"START_MISSION","parameters":{},"mission_version":1})";
+    std::string command = R"({"command_id":"c4","aircraft_id":"aerolink-1","timestamp":")" + now_timestamp() +
+                          R"(","command_type":"START_MISSION","parameters":{},"mission_version":1})";
     command += "\n";
     REQUIRE(write(client_fd, command.c_str(), command.size()) == static_cast<ssize_t>(command.size()));
 

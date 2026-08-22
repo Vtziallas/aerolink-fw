@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include "protocol.h"
+#include "replay_guard.h"
 #include "state_tracker.h"
 
 namespace mission_agent {
@@ -29,18 +30,23 @@ class CommandValidator {
 public:
     // expected_aircraft_id is the identity half of the design doc's
     // "identity and schema" validation: any command addressed to a
-    // different aircraft is rejected outright. Timestamp/replay checking is
-    // deliberately NOT implemented -- the design doc puts replay protection
-    // explicitly out of scope for V1 (and NETWORKING.md's Status section
-    // says the same).
+    // different aircraft is rejected outright. replay_guard rejects stale
+    // or previously-seen command_id/timestamp pairs (see replay_guard.h);
+    // it's checked after identity so a command rejected for the wrong
+    // aircraft_id never burns its command_id in the replay cache.
     explicit CommandValidator(GeofenceConfig geofence,
-                              std::string expected_aircraft_id = kDefaultAircraftId);
+                              std::string expected_aircraft_id = kDefaultAircraftId,
+                              ReplayGuard replay_guard = ReplayGuard{});
 
-    ValidationResult validate(const Command& command, const StateSnapshot& state) const;
+    // Non-const: validation now has a side effect (recording command_id as
+    // seen in replay_guard_) rather than being a pure function of its
+    // arguments.
+    ValidationResult validate(const Command& command, const StateSnapshot& state);
 
 private:
     GeofenceConfig geofence_;
     std::string expected_aircraft_id_;
+    ReplayGuard replay_guard_;
 
     ValidationResult validate_upload_mission(const Command& command, const StateSnapshot& state) const;
     ValidationResult validate_start_mission(const StateSnapshot& state) const;

@@ -38,15 +38,25 @@ double distance_m(double lat1, double lon1, double lat2, double lon2) {
     return 2 * kEarthRadiusM * std::asin(std::sqrt(a));
 }
 
-CommandValidator::CommandValidator(GeofenceConfig geofence, std::string expected_aircraft_id)
-    : geofence_(geofence), expected_aircraft_id_(std::move(expected_aircraft_id)) {}
+CommandValidator::CommandValidator(GeofenceConfig geofence, std::string expected_aircraft_id,
+                                   ReplayGuard replay_guard)
+    : geofence_(geofence),
+      expected_aircraft_id_(std::move(expected_aircraft_id)),
+      replay_guard_(std::move(replay_guard)) {}
 
-ValidationResult CommandValidator::validate(const Command& command, const StateSnapshot& state) const {
+ValidationResult CommandValidator::validate(const Command& command, const StateSnapshot& state) {
     // Identity check first: a command addressed to another aircraft is
     // rejected before any of its contents are considered.
     if (command.aircraft_id != expected_aircraft_id_) {
         return ValidationResult{false, "command addressed to aircraft_id '" + command.aircraft_id +
                                            "', expected '" + expected_aircraft_id_ + "'"};
+    }
+
+    // Replay/staleness check second: only a command that's actually
+    // addressed to this aircraft gets to consume a slot in the replay
+    // cache.
+    if (auto reason = replay_guard_.check(command.command_id, command.timestamp)) {
+        return ValidationResult{false, *reason};
     }
 
     switch (command.command_type) {

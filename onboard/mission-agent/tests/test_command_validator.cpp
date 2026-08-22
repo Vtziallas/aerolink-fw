@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "../src/command_validator.h"
+#include <cstdio>
+#include <ctime>
 
 using namespace mission_agent;
 
@@ -8,11 +10,24 @@ GeofenceConfig test_geofence() {
     return GeofenceConfig{47.397742, 8.545593, 2000.0, 10.0f, 120.0f};
 }
 
-Command upload_command(std::vector<Waypoint> waypoints) {
+// A real "now" timestamp, in the format the real backend sends
+// (datetime.now(timezone.utc).isoformat()) -- must stay fresh, since
+// CommandValidator now rejects stale timestamps via ReplayGuard.
+std::string now_timestamp() {
+    std::time_t t = std::time(nullptr);
+    std::tm tm{};
+    gmtime_r(&t, &tm);
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d+00:00", tm.tm_year + 1900, tm.tm_mon + 1,
+                  tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    return buf;
+}
+
+Command upload_command(std::vector<Waypoint> waypoints, std::string command_id = "id-1") {
     Command cmd;
-    cmd.command_id = "id-1";
+    cmd.command_id = std::move(command_id);
     cmd.aircraft_id = "aerolink-1";
-    cmd.timestamp = "2026-08-14T10:00:00Z";
+    cmd.timestamp = now_timestamp();
     cmd.command_type = CommandType::UploadMission;
     cmd.mission_version = 1;
     cmd.waypoints = std::move(waypoints);
@@ -20,11 +35,11 @@ Command upload_command(std::vector<Waypoint> waypoints) {
 }
 
 // A command of the given type addressed to this aircraft, with no waypoints.
-Command command_of(CommandType type) {
+Command command_of(CommandType type, std::string command_id = "id-1") {
     Command cmd;
-    cmd.command_id = "id-1";
+    cmd.command_id = std::move(command_id);
     cmd.aircraft_id = "aerolink-1";
-    cmd.timestamp = "2026-08-14T10:00:00Z";
+    cmd.timestamp = now_timestamp();
     cmd.command_type = type;
     cmd.mission_version = 1;
     return cmd;
@@ -227,4 +242,36 @@ TEST_CASE("CommandValidator honors a non-default expected aircraft_id", "[comman
 
     cmd.aircraft_id = "aerolink-2";
     REQUIRE(validator.validate(cmd, state).is_valid);
+}
+
+TEST_CASE("CommandValidator rejects a stale command timestamp", "[command_validator]") {
+    CommandValidator validator(test_geofence());
+    StateSnapshot state = settled_state();
+    state.mission_uploaded = true;
+
+    Command cmd = command_of(CommandType::StartMission);
+    cmd.timestamp = "2020-01-01T00:00:00Z";
+    auto result = validator.validate(cmd, state);
+
+    REQUIRE_FALSE(result.is_valid);
+    REQUIRE(result.reason.find("freshness window") != std::string::npos);
+}
+
+TEST_CASE("CommandValidator rejects a replayed command_id", "[command_validator]") {
+    CommandValidator validator(test_geofence());
+    StateSnapshot state = settled_state();
+    state.mission_uploaded = true;
+
+    // Two otherwise-independent, individually-valid commands sharing a
+    // command_id -- the second must be rejected as a replay even though
+    // nothing else about it is wrong.
+    Command first = command_of(CommandType::StartMission, "dup-1");
+    REQUIRE(validator.validate(first, state).is_valid);
+
+    Command second = command_of(CommandType::ReturnToLaunch, "dup-1");
+    state.armed = true;
+    auto result = validator.validate(second, state);
+
+    REQUIRE_FALSE(result.is_valid);
+    REQUIRE(result.reason.find("already processed") != std::string::npos);
 }
