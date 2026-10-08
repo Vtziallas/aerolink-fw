@@ -13,8 +13,10 @@
 
 set -euo pipefail
 
-REAL_USER="${SUDO_USER:-youruser}"
-BACKEND_DIR="/mnt/c/Users/youruser/git/uav_project/ground-station/backend"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+REAL_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
+BACKEND_DIR="$PROJECT_ROOT/ground-station/backend"
 LOG_FILE="/tmp/backend_ground_net.log"
 
 exec ip netns exec ground-net sudo -u "$REAL_USER" env \

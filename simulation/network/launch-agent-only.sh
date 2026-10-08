@@ -9,8 +9,10 @@
 
 set -euo pipefail
 
-REAL_USER="${SUDO_USER:-youruser}"
-AGENT_BIN="/mnt/c/Users/youruser/git/uav_project/onboard/mission-agent/build/mission_agent"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+REAL_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
+AGENT_BIN="$PROJECT_ROOT/onboard/mission-agent/build/mission_agent"
 LOG_FILE="/tmp/mission_agent_aircraft_net.log"
 
 GEOFENCE_CENTER_LAT_DEG="${GEOFENCE_CENTER_LAT_DEG:-47.397742}"

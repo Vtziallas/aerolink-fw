@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-REAL_USER="${SUDO_USER:-youruser}"
+REAL_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
 PX4_DIR="/home/$REAL_USER/src/PX4-Autopilot/build/px4_sitl_default/src/modules/simulation/simulator_sih"
 PX4_BIN="/home/$REAL_USER/src/PX4-Autopilot/build/px4_sitl_default/bin/px4"
 LOG_FILE="/tmp/px4_sitl_aircraft_net.log"

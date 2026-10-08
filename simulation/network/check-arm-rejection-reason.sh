@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-REAL_USER="${SUDO_USER:-youruser}"
+REAL_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
 
 ip netns exec ground-net sudo -u "$REAL_USER" \
   /home/"$REAL_USER"/venvs/aerolink-backend/bin/python3 -c "

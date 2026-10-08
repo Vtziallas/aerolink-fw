@@ -23,10 +23,12 @@
 
 set -euo pipefail
 
-REAL_USER="${SUDO_USER:-youruser}"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+REAL_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
 PX4_DIR="/home/$REAL_USER/src/PX4-Autopilot/build/px4_sitl_default/src/modules/simulation/simulator_sih"
 PX4_BIN="/home/$REAL_USER/src/PX4-Autopilot/build/px4_sitl_default/bin/px4"
-AGENT_BIN="/mnt/c/Users/youruser/git/uav_project/onboard/mission-agent/build/mission_agent"
+AGENT_BIN="$PROJECT_ROOT/onboard/mission-agent/build/mission_agent"
 PX4_LOG_FILE="/tmp/px4_sitl_aircraft_net.log"
 AGENT_LOG_FILE="/tmp/mission_agent_aircraft_net.log"
 
